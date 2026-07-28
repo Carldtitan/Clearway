@@ -30,6 +30,8 @@ export function useVoiceTurn() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const playbackContextRef = useRef<AudioContext | null>(null);
+  const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   const stopMeter = useCallback(() => {
     if (animationRef.current !== null) {
@@ -80,9 +82,34 @@ export function useVoiceTurn() {
     return stream;
   }, []);
 
+  const unlockAudioOutput = useCallback(async () => {
+    const AudioContextConstructor =
+      window.AudioContext ??
+      (
+        window as typeof window & {
+          webkitAudioContext?: typeof AudioContext;
+        }
+      ).webkitAudioContext;
+    if (!AudioContextConstructor) return null;
+    if (
+      !playbackContextRef.current ||
+      playbackContextRef.current.state === "closed"
+    ) {
+      playbackContextRef.current = new AudioContextConstructor();
+    }
+    if (playbackContextRef.current.state === "suspended") {
+      await playbackContextRef.current.resume();
+    }
+    return playbackContextRef.current;
+  }, []);
+
   const activate = useCallback(async () => {
     setError(null);
     try {
+      // Resume the output context while the Start button's user activation is
+      // still current. This keeps fetched TTS audible after the async
+      // microphone permission prompt, including on strict mobile browsers.
+      await unlockAudioOutput();
       await ensureMicrophone();
       setState("idle");
     } catch (activationError) {
@@ -94,11 +121,17 @@ export function useVoiceTurn() {
       setState("error");
       throw new Error(message);
     }
-  }, [ensureMicrophone]);
+  }, [ensureMicrophone, unlockAudioOutput]);
 
   const speak = useCallback(async (text: string) => {
     setError(null);
     setState("speaking");
+    try {
+      playbackSourceRef.current?.stop();
+    } catch {
+      // The previous source already ended.
+    }
+    playbackSourceRef.current = null;
     audioRef.current?.pause();
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current);
@@ -112,22 +145,36 @@ export function useVoiceTurn() {
       });
       if (response.ok) {
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        audioUrlRef.current = url;
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        await new Promise<void>((resolve, reject) => {
-          audio.addEventListener("ended", () => resolve(), { once: true });
-          audio.addEventListener(
-            "error",
-            () => reject(new Error("Generated speech could not play.")),
-            { once: true },
-          );
-          audio.play().catch(reject);
-        });
-        audioRef.current = null;
-        URL.revokeObjectURL(url);
-        audioUrlRef.current = null;
+        const context = await unlockAudioOutput();
+        if (context) {
+          const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+          const source = context.createBufferSource();
+          source.buffer = buffer;
+          source.connect(context.destination);
+          playbackSourceRef.current = source;
+          await new Promise<void>((resolve) => {
+            source.addEventListener("ended", () => resolve(), { once: true });
+            source.start();
+          });
+          playbackSourceRef.current = null;
+        } else {
+          const url = URL.createObjectURL(blob);
+          audioUrlRef.current = url;
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          await new Promise<void>((resolve, reject) => {
+            audio.addEventListener("ended", () => resolve(), { once: true });
+            audio.addEventListener(
+              "error",
+              () => reject(new Error("Generated speech could not play.")),
+              { once: true },
+            );
+            audio.play().catch(reject);
+          });
+          audioRef.current = null;
+          URL.revokeObjectURL(url);
+          audioUrlRef.current = null;
+        }
         setState("idle");
         return;
       }
@@ -155,7 +202,7 @@ export function useVoiceTurn() {
     });
     utteranceRef.current = null;
     setState("idle");
-  }, []);
+  }, [unlockAudioOutput]);
 
   const listen = useCallback(async (): Promise<string> => {
     setError(null);
@@ -263,6 +310,14 @@ export function useVoiceTurn() {
       window.speechSynthesis?.cancel();
       audioRef.current?.pause();
       audioRef.current = null;
+      try {
+        playbackSourceRef.current?.stop();
+      } catch {
+        // The source already ended.
+      }
+      playbackSourceRef.current = null;
+      void playbackContextRef.current?.close();
+      playbackContextRef.current = null;
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
