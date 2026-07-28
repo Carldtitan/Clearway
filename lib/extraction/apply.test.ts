@@ -64,7 +64,7 @@ describe("interview extraction boundary", () => {
       dispatch,
       extraction,
       "turn-1",
-      (prefix) => `${prefix}-1`,
+      { createId: (prefix) => `${prefix}-1` },
     );
 
     expect(applicantCase.applicant.legalName.value).toBe("Jordan Lee");
@@ -89,7 +89,7 @@ describe("interview extraction boundary", () => {
       dispatch,
       extraction,
       "turn-2",
-      (prefix) => `${prefix}-2`,
+      { createId: (prefix) => `${prefix}-2` },
     );
 
     applicantCase = caseReducer(applicantCase, {
@@ -98,5 +98,21 @@ describe("interview extraction boundary", () => {
     });
 
     expect(applicantCase.conditions[0].name.provenance.state).toBe("confirmed");
+  });
+
+  it("preserves typed provenance through scalar and repeated facts", () => {
+    let applicantCase = createEmptyApplicantCase();
+    const dispatch = (action: CaseAction) => {
+      applicantCase = caseReducer(applicantCase, action);
+    };
+
+    applyInterviewExtraction(dispatch, extraction, "typed-turn", {
+      createId: (prefix) => `${prefix}-typed`,
+      source: "typed",
+    });
+
+    expect(applicantCase.applicant.legalName.provenance.source).toBe("typed");
+    expect(applicantCase.conditions[0].name.provenance.source).toBe("typed");
+    expect(applicantCase.providers[0].name.provenance.source).toBe("typed");
   });
 });

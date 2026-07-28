@@ -68,6 +68,7 @@ export function caseReducer(
           action.patch.value,
           action.patch.confidence,
           action.patch.turnId,
+          action.patch.source,
         ),
       );
     default:
@@ -148,6 +149,7 @@ function applyCandidateAtPath(
   value: unknown,
   confidence: number,
   turnId: string,
+  source: "typed" | "voice" | "seed",
 ): ApplicantCase {
   return mapPath(state, path, (current) => {
     if (
@@ -159,14 +161,14 @@ function applyCandidateAtPath(
         provenance: { ...current.provenance, state: "conflict" },
         conflictingValues: [
           ...(current.conflictingValues ?? []),
-          { value, source: "voice", turnId },
+          { value, source, turnId },
         ],
       };
     }
     return {
       value,
       provenance: {
-        source: "voice",
+        source,
         state: "unconfirmed",
         confidence,
         turnId,

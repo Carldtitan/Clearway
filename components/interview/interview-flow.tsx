@@ -179,7 +179,10 @@ export function InterviewFlow() {
       }
       if (source === "typed") setTypedAnswer("");
       if (applicantCase.mode !== "synthetic_demo") {
-        applyInterviewExtraction(dispatch, nextExtraction, turnId);
+        applyInterviewExtraction(dispatch, nextExtraction, turnId, {
+          source:
+            source === "typed" ? "typed" : source === "demo" ? "seed" : "voice",
+        });
       }
       dispatch({
         type: "UPDATE_INTERVIEW_TURN",

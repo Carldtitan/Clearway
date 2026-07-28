@@ -216,6 +216,7 @@ export interface CandidatePatch {
   confidence: number;
   evidenceText: string;
   turnId: string;
+  source: CaptureSource;
 }
 
 export type AddEntityAction = {
