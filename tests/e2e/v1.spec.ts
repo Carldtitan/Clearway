@@ -207,6 +207,85 @@ test("a rejected voice answer becomes a correction turn", async ({ page }) => {
   expect(transcripts).toEqual([]);
 });
 
+test("a substantive next answer accepts the prior readback", async ({ page }) => {
+  await installSyntheticMicrophone(page);
+  const transcripts = [
+    "I'm ready",
+    "Ana Rivera",
+    "000-12-3456",
+    "pause",
+  ];
+  const spokenPrompts: string[] = [];
+
+  await page.route("**/api/speak", async (route) => {
+    const request = route.request().postDataJSON() as { text: string };
+    spokenPrompts.push(request.text);
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Use browser speech in this test." }),
+    });
+  });
+  await page.route("**/api/transcribe", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ transcript: transcripts.shift() ?? "pause" }),
+    }),
+  );
+  await page.route("**/api/interview/extract", async (route) => {
+    const request = route.request().postDataJSON() as {
+      turnId: string;
+      topic: string;
+    };
+    const isName = request.topic === "legal-name";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        turnId: request.turnId,
+        extraction: {
+          summary: isName ? "Ana Rivera" : "000-12-3456",
+          acknowledgement: isName
+            ? "I have your name as Ana Rivera."
+            : "I have those digits.",
+          answerComplete: true,
+          confirmationText: "",
+          followUpQuestion: "",
+          providerListStatus: "unknown",
+          facts: [
+            {
+              kind: "scalar",
+              entityKey: "",
+              field: isName ? "applicant.legalName" : "applicant.ssn",
+              value: isName ? "Ana Rivera" : "000-12-3456",
+              confidence: 0.99,
+              evidenceText: isName ? "Ana Rivera" : "000-12-3456",
+            },
+          ],
+        },
+      }),
+    });
+  });
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /English EN/i }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "What is your date of birth?" }),
+  ).toBeVisible();
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Ana Rivera", { exact: true }).first(),
+  ).toBeVisible();
+  expect(
+    spokenPrompts.some((prompt) =>
+      prompt.includes("Please say yes if that is correct"),
+    ),
+  ).toBe(false);
+  expect(transcripts).toEqual([]);
+});
+
 test("language is the first decision and removed workflow copy is absent", async ({
   page,
 }) => {

@@ -192,7 +192,9 @@ describe("GuidedApplication", () => {
     );
     await waitFor(() =>
       expect(voiceMocks.speak).toHaveBeenCalledWith(
-        expect.stringContaining("I heard Jane Rivera."),
+        expect.stringContaining(
+          "I have Jane Rivera. What is your Social Security number?",
+        ),
       ),
     );
 
@@ -205,5 +207,86 @@ describe("GuidedApplication", () => {
       2,
       expect.objectContaining({ transcript: "Jane Rivera" }),
     );
+  });
+
+  it("uses several facts from one answer without asking for them again", async () => {
+    const user = userEvent.setup();
+    voiceMocks.listen
+      .mockReset()
+      .mockResolvedValueOnce("I'm ready")
+      .mockResolvedValueOnce(
+        "I'm Jane Rivera, my SSN is 000-12-3456, and I was born January 2, 1980 in Fresno, California.",
+      )
+      .mockResolvedValueOnce("pause")
+      .mockImplementation(() => new Promise(() => undefined));
+    extractionMocks.request.mockResolvedValueOnce({
+      summary:
+        "Jane Rivera, SSN 000-12-3456, born January 2, 1980 in Fresno, California",
+      acknowledgement: "I have those identity details.",
+      answerComplete: true,
+      confirmationText: "",
+      followUpQuestion: "",
+      providerListStatus: "unknown",
+      facts: [
+        {
+          kind: "scalar",
+          entityKey: "",
+          field: "applicant.legalName",
+          value: "Jane Rivera",
+          confidence: 0.99,
+          evidenceText: "Jane Rivera",
+        },
+        {
+          kind: "scalar",
+          entityKey: "",
+          field: "applicant.ssn",
+          value: "000-12-3456",
+          confidence: 0.99,
+          evidenceText: "000-12-3456",
+        },
+        {
+          kind: "scalar",
+          entityKey: "",
+          field: "applicant.dateOfBirth",
+          value: "1980-01-02",
+          confidence: 0.99,
+          evidenceText: "January 2, 1980",
+        },
+        {
+          kind: "scalar",
+          entityKey: "",
+          field: "applicant.placeOfBirth",
+          value: "Fresno, California",
+          confidence: 0.99,
+          evidenceText: "Fresno, California",
+        },
+      ],
+    });
+
+    render(
+      <CaseProvider>
+        <GuidedApplication />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /EnglishEN/i }));
+
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "I have those identity details. Are you a United States citizen?",
+        ),
+      ),
+    );
+    expect(
+      voiceMocks.speak.mock.calls.some(
+        ([message]) =>
+          message ===
+            "What is your Social Security number? You can say each digit separately." ||
+          message === "What is your date of birth?" ||
+          message ===
+            "In what city, state, and country were you born?",
+      ),
+    ).toBe(false);
   });
 });

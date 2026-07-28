@@ -132,9 +132,16 @@ export const extractedFactSchema = z.object({
 export const interviewExtractionSchema = z.object({
   summary: z.string(),
   confirmationText: z.string().optional(),
+  acknowledgement: z.string().optional(),
+  answerComplete: z.boolean().optional(),
   followUpQuestion: z.string(),
   providerListStatus: z.enum(["complete", "more_possible", "unknown"]),
   facts: z.array(extractedFactSchema),
+});
+
+export const conversationContextMessageSchema = z.object({
+  role: z.enum(["assistant", "user"]),
+  content: z.string().trim().min(1).max(2_000),
 });
 
 export const extractionRequestSchema = z.object({
@@ -143,6 +150,7 @@ export const extractionRequestSchema = z.object({
   topic: z.string().trim().min(1).max(100).optional(),
   prompt: z.string().trim().min(1).max(1_000).optional(),
   transcript: z.string().trim().min(1).max(8_000),
+  history: z.array(conversationContextMessageSchema).max(48).default([]),
 });
 
 export type ExtractedFact = z.infer<typeof extractedFactSchema>;

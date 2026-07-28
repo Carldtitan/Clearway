@@ -34,7 +34,13 @@ Rules:
 - Evidence text must be a short exact excerpt from the transcript.
 - Confidence reflects whether the transcript directly supports the value, not whether the value sounds plausible.
 - summary must be a concise English statement of the facts that will be stored in English SSA form fields.
-- confirmationText and followUpQuestion must use the requested conversation language.
+- acknowledgement, confirmationText, and followUpQuestion must use the requested conversation language.
+- acknowledgement is a warm, factual response of at most twelve words. Do not praise the applicant, use filler, or ask a question.
+- confirmationText is a brief declarative readback. Do not require a separate yes/no response after ordinary answers.
+- answerComplete is true when the latest answer and the supplied conversation context provide enough information to answer the current question.
+- When answerComplete is false, followUpQuestion asks one short, specific question that obtains the missing detail. Otherwise followUpQuestion is an empty string.
+- Use the supplied conversation history to resolve references such as "that doctor", "the same medicine", or "back then".
+- Extract facts explicitly stated in the latest answer. Use history only to resolve references; do not re-emit old facts unless the latest answer corrects or completes them.
 - Keep legal names, addresses, identifiers, numbers, and dates exactly as stated. Do not translate them.
 - Do not offer legal advice or decide eligibility.
 - Return only schema-conforming data.`;
@@ -76,6 +82,9 @@ export async function POST(request: Request) {
 Interview topic: ${input.data.topic ?? "general"}
 Question asked: ${input.data.prompt ?? "not provided"}
 
+Recent conversation, oldest to newest:
+${formatHistory(input.data.history)}
+
 Extract English canonical SSDI application facts from this answer. Confirm the meaning in ${input.data.locale}:
 
 ${input.data.transcript}`,
@@ -113,6 +122,18 @@ ${input.data.transcript}`,
       ),
     );
   }
+}
+
+function formatHistory(
+  history: Array<{ role: "assistant" | "user"; content: string }>,
+) {
+  if (!history.length) return "(No earlier turns.)";
+  return history
+    .map(
+      (message) =>
+        `${message.role === "assistant" ? "Assistant" : "Applicant"}: ${message.content}`,
+    )
+    .join("\n");
 }
 
 async function safeJson(request: Request): Promise<unknown> {

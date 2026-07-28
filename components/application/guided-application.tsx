@@ -29,6 +29,7 @@ import type {
   InterviewTurn,
   SupportedLocale,
 } from "@/lib/case/types";
+import { caseReducer } from "@/lib/case/reducer";
 import {
   confirmationPrompt,
   confirmationRetry,
@@ -37,6 +38,7 @@ import {
   parseLocalizedYesNo,
   readyAnswer,
 } from "@/lib/conversation/answers";
+import { buildConversationContext } from "@/lib/conversation/context";
 import {
   parseVoiceCommand,
   type ParsedVoiceCommand,
@@ -84,6 +86,9 @@ interface PendingAnswer {
   summary: string;
   extraction: InterviewExtraction | null;
   directActions: CaseAction[];
+  commitActions: CaseAction[];
+  turnIds: string[];
+  followUpCount: number;
 }
 
 export function GuidedApplication() {
@@ -132,6 +137,8 @@ export function GuidedApplication() {
       processedStartLocaleRef.current !== activatedStartLocale
     ) {
       processedStartLocaleRef.current = activatedStartLocale;
+      // The effect intentionally resumes the current function-declared workflow.
+      // eslint-disable-next-line react-hooks/immutability
       void continueLanguageStart(activatedStartLocale);
     }
     const resumeQuestionId = localeResumeQuestionIdRef.current;
@@ -139,6 +146,8 @@ export function GuidedApplication() {
       localeResumeQuestionIdRef.current = null;
       const question = questionById(resumeQuestionId);
       if (question) {
+        // The question runner is stable for the lifetime of this render.
+        // eslint-disable-next-line react-hooks/immutability
         window.setTimeout(() => void askQuestion(question), 120);
       }
     }
@@ -402,7 +411,7 @@ export function GuidedApplication() {
       setPending(nextPending);
       setStatus("confirming");
       if (source === "voice") {
-        await confirmVoiceAnswer(nextPending);
+        await continueVoiceConversation(nextPending);
       }
     } catch (processingError) {
       dispatch({
@@ -431,6 +440,17 @@ export function GuidedApplication() {
     const directActions: CaseAction[] = [];
     let extraction: InterviewExtraction | null = null;
     let summary = transcript;
+    const extractWithContext = () =>
+      requestInterviewExtraction({
+        turnId,
+        locale,
+        topic: question.id,
+        prompt: localized(question.prompt, locale),
+        transcript,
+        history: buildConversationContext(
+          caseRef.current.interviewTurns,
+        ),
+      });
 
     if (question.answerKind === "yes_no") {
       const parsed = parseLocalizedYesNo(transcript, locale);
@@ -455,6 +475,10 @@ export function GuidedApplication() {
           patch: { conditionExpectedToLast12Months: parsed.value },
         });
       }
+      if (hasConversationalDetail(transcript, locale)) {
+        extraction = await extractWithContext();
+        summary = extraction.summary;
+      }
     } else if (question.answerKind === "currency") {
       const amount = parseSpokenNumber(transcript);
       if (amount === null || amount < 0) {
@@ -475,6 +499,10 @@ export function GuidedApplication() {
         type: "SET_ELIGIBILITY_INPUT",
         patch: { monthlyEarningsUsd: amount },
       });
+      if (hasConversationalDetail(transcript, locale)) {
+        extraction = await extractWithContext();
+        summary = extraction.summary;
+      }
     } else if (
       isCollectionQuestion(question) &&
       explicitNone(transcript, locale)
@@ -488,15 +516,11 @@ export function GuidedApplication() {
       });
       summary = transcript;
     } else {
-      extraction = await requestInterviewExtraction({
-        turnId,
-        locale,
-        topic: question.id,
-        prompt: localized(question.prompt, locale),
-        transcript,
-      });
-      summary = extraction.confirmationText?.trim() || extraction.summary;
+      extraction = await extractWithContext();
+      summary = extraction.summary;
+    }
 
+    if (extraction) {
       if (isCollectionQuestion(question)) {
         const collection = question.answerKind;
         const extractedItems = extraction.facts.some(
@@ -532,29 +556,31 @@ export function GuidedApplication() {
           }
         }
       }
-      if (question.id === "date-of-birth") {
-        const date = factValue(extraction, "applicant.dateOfBirth");
-        if (date) {
-          directActions.push({
-            type: "SET_ELIGIBILITY_INPUT",
-            patch: { dateOfBirth: date },
-          });
-        }
+      const birthDate = factValue(extraction, "applicant.dateOfBirth");
+      if (birthDate) {
+        directActions.push({
+          type: "SET_ELIGIBILITY_INPUT",
+          patch: { dateOfBirth: birthDate },
+        });
       }
-      if (question.id === "onset-date") {
-        const date = factValue(extraction, "condition.allegedOnsetDate");
-        if (date) {
+      const onsetDate = factValue(
+        extraction,
+        "condition.allegedOnsetDate",
+      );
+      if (onsetDate) {
+        directActions.push({
+          type: "SET_ELIGIBILITY_INPUT",
+          patch: { allegedOnsetDate: onsetDate },
+        });
+        if (
+          question.id === "onset-date" &&
+          caseRef.current.conditions.length
+        ) {
           directActions.push({
-            type: "SET_ELIGIBILITY_INPUT",
-            patch: { allegedOnsetDate: date },
+            type: "EDIT_VALUE",
+            path: "conditions.0.allegedOnsetDate",
+            value: onsetDate,
           });
-          if (caseRef.current.conditions.length) {
-            directActions.push({
-              type: "EDIT_VALUE",
-              path: "conditions.0.allegedOnsetDate",
-              value: date,
-            });
-          }
         }
       }
       if (
@@ -572,6 +598,13 @@ export function GuidedApplication() {
       }
     }
 
+    const commitActions = buildCommitActions({
+      directActions,
+      extraction,
+      source,
+      turnId,
+    });
+
     return {
       question,
       transcript,
@@ -580,50 +613,121 @@ export function GuidedApplication() {
       summary,
       extraction,
       directActions,
+      commitActions,
+      turnIds: [turnId],
+      followUpCount: 0,
     };
   }
 
-  async function confirmVoiceAnswer(answer: PendingAnswer) {
-    let confirmation = await askContinuously(
-      answer.extraction?.confirmationText?.trim()
-        ? `${answer.extraction.confirmationText} ${confirmationRetry(locale)}`
-        : confirmationPrompt(answer.summary, locale),
-      locale,
+  async function continueVoiceConversation(answer: PendingAnswer) {
+    const preview = previewPending(answer);
+    const followUp =
+      answer.followUpCount < 2 &&
+      answer.extraction?.answerComplete === false &&
+      answer.extraction.followUpQuestion.trim()
+        ? answer.extraction.followUpQuestion.trim()
+        : null;
+    const next = followUp
+      ? answer.question
+      : nextQuestionForCase(preview);
+
+    if (!next) {
+      commitPending(answer);
+      await voice.speak(naturalAcknowledgement(answer, locale));
+      window.setTimeout(() => void finishIntake(), 120);
+      return;
+    }
+
+    const nextIndex = QUESTION_REGISTRY.findIndex(
+      (candidate) => candidate.id === next.id,
     );
-    for (;;) {
-      const parsed = parseLocalizedYesNo(confirmation, locale);
-      if (!parsed.ok) {
-        confirmation = await askContinuously(
-          confirmationRetry(locale),
-          locale,
-        );
-        continue;
-      }
-      if (!parsed.value) {
-        const inlineCorrection = correctionFromRejection(
-          confirmation,
-          locale,
-        );
+    const nextPrompt = followUp
+      ? followUp
+      : next.id === answer.question.id &&
+          isCollectionQuestion(answer.question)
+        ? collectionContinuationPrompt(answer.question, locale)
+      : localized(next.prompt, locale);
+    const bridge = `${naturalAcknowledgement(answer, locale)} ${nextPrompt}`;
+    dispatch({ type: "SET_ACTIVE_QUESTION", questionId: next.id });
+    setCursor(Math.max(0, nextIndex));
+    setPending(answer);
+    setRepairPrompt(bridge);
+    setStatus("asking");
+
+    try {
+      const response = await askContinuously(bridge, locale);
+      const correction = contextualCorrection(response, locale);
+      if (correction.isCorrection) {
         rejectPending(answer);
-        if (inlineCorrection) {
+        if (correction.replacement) {
           await voice.speak(
             localized(copy.correctionAcknowledged, locale),
           );
           await processTranscript(
             answer.question,
-            inlineCorrection,
+            correction.replacement,
             "voice",
           );
-          return;
+        } else {
+          await requestVoiceCorrection(answer.question);
         }
-        await requestVoiceCorrection(answer.question);
         return;
       }
+
+      if (!followUp && isBareAffirmation(response, locale)) {
+        commitPending(answer);
+        await askQuestion(next);
+        return;
+      }
+
+      if (followUp) {
+        await continueFollowUp(answer, response);
+        return;
+      }
+
       commitPending(answer);
-      await voice.speak(localized(copy.answerConfirmed, locale));
-      window.setTimeout(() => void askAt(cursor), 120);
-      return;
+      await processTranscript(next, response, "voice");
+    } catch (conversationError) {
+      setTypedMode(true);
+      setStatus("error");
+      setError(
+        isMicrophoneUnavailableError(conversationError)
+          ? microphoneUnavailable(locale)
+          : answerProcessingFailed(locale),
+      );
     }
+  }
+
+  async function continueFollowUp(
+    answer: PendingAnswer,
+    response: string,
+  ) {
+    const followUpTurnId = `turn-${crypto.randomUUID()}`;
+    const combinedTranscript = `${answer.transcript}\nAdditional detail: ${response}`;
+    dispatch({
+      type: "ADD_INTERVIEW_TURN",
+      turn: {
+        id: followUpTurnId,
+        prompt:
+          answer.extraction?.followUpQuestion ||
+          localized(answer.question.prompt, locale),
+        transcript: response,
+        source: "voice",
+        status: "extracting",
+        createdAt: new Date().toISOString(),
+        locale,
+      },
+    });
+    const revised = await prepareAnswer(
+      answer.question,
+      combinedTranscript,
+      "voice",
+      followUpTurnId,
+    );
+    revised.turnIds = [...answer.turnIds, followUpTurnId];
+    revised.followUpCount = answer.followUpCount + 1;
+    setPending(revised);
+    await continueVoiceConversation(revised);
   }
 
   async function requestVoiceCorrection(question: QuestionDefinition) {
@@ -657,42 +761,51 @@ export function GuidedApplication() {
   }
 
   function commitPending(answer: PendingAnswer) {
-    if (answer.extraction) {
-      applyInterviewExtraction(
-        dispatch,
-        answer.extraction,
-        answer.turnId,
-        {
-          confirmed: true,
-          source: answer.source,
-        },
-      );
-    }
-    answer.directActions.forEach(dispatch);
-    dispatch({
-      type: "UPDATE_INTERVIEW_TURN",
-      turnId: answer.turnId,
-      patch: {
-        status: "extracted",
-        canonicalSummary: answer.extraction?.summary ?? answer.summary,
-      },
+    let nextCase = caseRef.current;
+    answer.commitActions.forEach((action) => {
+      dispatch(action);
+      nextCase = caseReducer(nextCase, action);
     });
-    dispatch({
+    answer.turnIds.forEach((turnId) => {
+      const action: CaseAction = {
+        type: "UPDATE_INTERVIEW_TURN",
+        turnId,
+        patch: {
+          status: "extracted",
+          canonicalSummary: answer.extraction?.summary ?? answer.summary,
+        },
+      };
+      dispatch(action);
+      nextCase = caseReducer(nextCase, action);
+    });
+    const resolveAction: CaseAction = {
       type: "RESOLVE_DEFERRED_QUESTION",
       questionId: answer.question.id,
-    });
+    };
+    dispatch(resolveAction);
+    nextCase = caseReducer(nextCase, resolveAction);
+    caseRef.current = nextCase;
     setPending(null);
     setTypedAnswer("");
   }
 
   function rejectPending(answer: PendingAnswer) {
-    dispatch({
-      type: "UPDATE_INTERVIEW_TURN",
-      turnId: answer.turnId,
-      patch: { status: "final" },
+    answer.turnIds.forEach((turnId) => {
+      dispatch({
+        type: "UPDATE_INTERVIEW_TURN",
+        turnId,
+        patch: { status: "final" },
+      });
     });
     setPending(null);
     setTypedAnswer("");
+  }
+
+  function previewPending(answer: PendingAnswer) {
+    return answer.commitActions.reduce(
+      (preview, action) => caseReducer(preview, action),
+      caseRef.current,
+    );
   }
 
   async function handleCommand(
@@ -1487,6 +1600,202 @@ function factValue(
   field: InterviewExtraction["facts"][number]["field"],
 ) {
   return extraction.facts.find((fact) => fact.field === field)?.value ?? null;
+}
+
+function buildCommitActions({
+  directActions,
+  extraction,
+  source,
+  turnId,
+}: {
+  directActions: CaseAction[];
+  extraction: InterviewExtraction | null;
+  source: PendingAnswer["source"];
+  turnId: string;
+}) {
+  const actions: CaseAction[] = [];
+  if (extraction) {
+    const entityCounts = new Map<string, number>();
+    applyInterviewExtraction(
+      (action) => {
+        actions.push(action);
+      },
+      extraction,
+      turnId,
+      {
+        confirmed: true,
+        source,
+        createId: (prefix) => {
+          const next = (entityCounts.get(prefix) ?? 0) + 1;
+          entityCounts.set(prefix, next);
+          return `${prefix}-${turnId}-${next}`;
+        },
+      },
+    );
+  }
+  actions.push(...directActions);
+  return actions;
+}
+
+function nextQuestionForCase(
+  applicantCase: Parameters<typeof nextQuestion>[0],
+) {
+  return (
+    QUESTION_REGISTRY.find(
+      (candidate) =>
+        candidate.isActive(applicantCase) &&
+        !candidate.isAnswered(applicantCase) &&
+        !applicantCase.deferredItems.some(
+          (item) => item.questionId === candidate.id,
+        ),
+    ) ?? null
+  );
+}
+
+function naturalAcknowledgement(
+  answer: PendingAnswer,
+  locale: SupportedLocale,
+) {
+  const readback = answer.extraction?.confirmationText?.trim();
+  if (readback && !/[?？]\s*$/.test(readback)) return readback;
+  const generated = answer.extraction?.acknowledgement?.trim();
+  if (generated) return generated;
+  const summary = answer.summary.trim().replace(/[.。]+$/, "");
+  if (answer.question.answerKind === "yes_no") {
+    return {
+      "en-US": `Okay, I’ll put that down as ${summary}.`,
+      "es-US": `De acuerdo, anotaré ${summary}.`,
+      "zh-CN": `好的，我会记录为${summary}。`,
+    }[locale];
+  }
+  if (
+    isCollectionQuestion(answer.question) &&
+    explicitNone(answer.transcript, locale)
+  ) {
+    return {
+      "en-US": "Okay, I have the full list.",
+      "es-US": "De acuerdo, tengo la lista completa.",
+      "zh-CN": "好的，我已经记下完整清单。",
+    }[locale];
+  }
+  return {
+    "en-US": `I have ${summary}.`,
+    "es-US": `Anoté ${summary}.`,
+    "zh-CN": `我记下了：${summary}。`,
+  }[locale];
+}
+
+function collectionContinuationPrompt(
+  question: QuestionDefinition,
+  locale: SupportedLocale,
+) {
+  const prompts: Record<
+    Extract<
+      QuestionDefinition["answerKind"],
+      "providers" | "medications" | "jobs" | "marriages" | "children"
+    >,
+    Record<SupportedLocale, string>
+  > = {
+    providers: {
+      "en-US":
+        "Who else treated you? If that was everyone, just tell me the list is complete.",
+      "es-US":
+        "¿Quién más le atendió? Si no hay nadie más, dígame que la lista está completa.",
+      "zh-CN": "还有谁为您治疗过？如果没有其他人，请告诉我名单已经完整。",
+    },
+    medications: {
+      "en-US":
+        "What other medicine do you take for these conditions? Tell me when that is the full list.",
+      "es-US":
+        "¿Qué otro medicamento toma para estas condiciones? Dígame cuando la lista esté completa.",
+      "zh-CN": "您还服用哪些相关药物？清单完整时请告诉我。",
+    },
+    jobs: {
+      "en-US":
+        "What other job did you have during those five years? Tell me when that is the full list.",
+      "es-US":
+        "¿Qué otro trabajo tuvo durante esos cinco años? Dígame cuando la lista esté completa.",
+      "zh-CN": "那五年里您还做过什么工作？清单完整时请告诉我。",
+    },
+    marriages: {
+      "en-US":
+        "Was there another current or former marriage? Tell me when that is the full list.",
+      "es-US":
+        "¿Hubo otro matrimonio actual o anterior? Dígame cuando la lista esté completa.",
+      "zh-CN": "还有其他目前或过去的婚姻吗？清单完整时请告诉我。",
+    },
+    children: {
+      "en-US":
+        "Is there another child I should include? Tell me when that is the full list.",
+      "es-US":
+        "¿Hay otro hijo que deba incluir? Dígame cuando la lista esté completa.",
+      "zh-CN": "还有其他需要列入的子女吗？清单完整时请告诉我。",
+    },
+  };
+  return prompts[question.answerKind as keyof typeof prompts][locale];
+}
+
+function isBareAffirmation(
+  transcript: string,
+  locale: SupportedLocale,
+) {
+  const normalized = transcript
+    .trim()
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[“”"'’.,!?¿¡。！？]/g, "")
+    .replace(/\s+/g, " ");
+  return {
+    "en-US": /^(?:yes|yeah|yep|correct|right|that's right|that is right)$/,
+    "es-US": /^(?:si|correcto|correcta|asi es|de acuerdo)$/,
+    "zh-CN": /^(?:是|对|正确|没错|好的)$/,
+  }[locale].test(normalized);
+}
+
+function contextualCorrection(
+  transcript: string,
+  locale: SupportedLocale,
+): { isCorrection: boolean; replacement: string | null } {
+  const correctionPatterns: Record<SupportedLocale, RegExp> = {
+    "en-US":
+      /(?:don['’]?t|do not) save|(?:that(?:'s| is)|you(?:'re| are)) (?:wrong|not right)|\bi meant\b|change (?:that|my last answer)|correct (?:that|my last answer)|disregard that|ignore that/i,
+    "es-US":
+      /no (?:lo )?guarde|eso est[aá] mal|no es correcto|quise decir|cambie (?:eso|mi respuesta)|corrija (?:eso|mi respuesta)|ignore eso/i,
+    "zh-CN":
+      /不要保存|别保存|刚才.*(?:不对|错)|你听错了|我的意思是|修改刚才|更正刚才|忽略刚才/,
+  };
+  if (!correctionPatterns[locale].test(transcript)) {
+    return { isCorrection: false, replacement: null };
+  }
+
+  const rejectedReplacement = correctionFromRejection(
+    transcript,
+    locale,
+  );
+  if (rejectedReplacement) {
+    return { isCorrection: true, replacement: rejectedReplacement };
+  }
+
+  const replacementPatterns: Record<SupportedLocale, RegExp> = {
+    "en-US":
+      /^(?:.*?)(?:i meant|it should be|the correct answer is|change (?:that|it) to)\s+(.+)$/i,
+    "es-US":
+      /^(?:.*?)(?:quise decir|debe ser|la respuesta correcta es|cambie (?:eso|lo) a)\s+(.+)$/i,
+    "zh-CN": /^(?:.*?)(?:我的意思是|应该是|正确答案是|改成)\s*(.+)$/,
+  };
+  const replacement =
+    transcript.match(replacementPatterns[locale])?.[1]?.trim() ?? null;
+  return { isCorrection: true, replacement };
+}
+
+function hasConversationalDetail(
+  transcript: string,
+  locale: SupportedLocale,
+) {
+  const normalized = transcript.trim();
+  if (locale === "zh-CN") return normalized.length > 6;
+  return normalized.split(/\s+/).length > 4;
 }
 
 function correctionTargetPrompt(

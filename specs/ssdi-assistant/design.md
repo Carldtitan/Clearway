@@ -98,7 +98,10 @@ LanguageSelection
   -> CommandParser
       -> command handler
       -> locale-aware extraction
-  -> spoken confirmation
+  -> staged candidate facts
+  -> contextual acknowledgement + next unresolved question
+      -> correction: discard candidate and repair
+      -> substantive answer: confirm prior candidate and process next answer
   -> CompletionEngine
       -> next question
       -> issue resolution
@@ -108,6 +111,10 @@ LanguageSelection
 ```
 
 The voice controller persists across the three user-facing stages. Its public methods accept the active locale and never silently fall back to a different language. Exact command parsing runs before LLM extraction so navigation speech cannot become form content.
+
+The Conversation Orchestrator uses progressive confirmation. Candidate actions are first applied to a reducer preview, never the live case. That preview selects the next unresolved registry entry, including skipping questions answered incidentally in a longer response. The assistant speaks one short acknowledgement followed by that next question. A correction discards the staged actions; any substantive response accepts them before the new response is processed. A bare affirmative remains supported but is never required.
+
+Extraction receives no more than 24 confirmed prompt/transcript pairs. Rejected and failed turns are excluded. The latest answer remains authoritative; history is used only to resolve references and must not cause historical facts to be emitted again. The extraction schema returns a short localized acknowledgement, declarative readback, completion flag, one targeted follow-up when necessary, English canonical facts, confidence, and provenance.
 
 ```ts
 type SupportedLocale = "en-US" | "es-US" | "zh-CN";

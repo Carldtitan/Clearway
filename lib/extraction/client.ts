@@ -1,6 +1,7 @@
 "use client";
 
 import type { SupportedLocale } from "@/lib/case/types";
+import type { ConversationContextMessage } from "@/lib/conversation/context";
 import type { InterviewExtraction } from "@/lib/extraction/schema";
 
 export async function requestInterviewExtraction(input: {
@@ -9,6 +10,7 @@ export async function requestInterviewExtraction(input: {
   topic: string;
   prompt: string;
   transcript: string;
+  history?: ConversationContextMessage[];
 }): Promise<InterviewExtraction> {
   const response = await fetch("/api/interview/extract", {
     method: "POST",

@@ -53,6 +53,12 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 6. WHEN the applicant says “skip,” “disregard,” or “I don’t know,” THE SSDI_Assistant SHALL interpret the phrase as a command or explicit unknown and SHALL NOT save the phrase as a form value.
 7. THE SSDI_Assistant SHALL support repeat, explain, pause, continue, go back, correct, defer, status, change language, review, generate packet, download packet, open records, and mark received by voice.
 8. IF a command changes or removes confirmed information, THEN THE SSDI_Assistant SHALL identify the target and obtain confirmation before applying the command.
+9. WHEN one applicant answer explicitly supplies facts for multiple active questions, THE Conversation_Orchestrator SHALL extract every supported fact and SHALL NOT ask a later question whose canonical target is already resolved.
+10. WHEN an ordinary answer can be reflected safely, THE Conversation_Orchestrator SHALL combine a brief declarative readback with the next relevant question and SHALL NOT require a separate yes/no turn.
+11. WHEN the applicant answers the next question without correcting the readback, THE Conversation_Orchestrator SHALL treat the prior readback as accepted; IF the applicant corrects it, THEN THE prior candidate SHALL remain unsaved and the correction SHALL be resolved before continuing.
+12. WHEN the latest answer lacks a detail required for the active question, THE Conversation_Orchestrator SHALL ask one context-specific follow-up instead of restarting the original question.
+13. THE Conversation_Orchestrator SHALL supply up to the 24 most recent confirmed Interview_Turn pairs to extraction and SHALL exclude rejected or failed answers from that context.
+14. THE Voice_Interview SHALL accept a spoken answer lasting up to 120 seconds and SHALL allow a pause of at least 1.8 seconds inside an answer lasting at least 8 seconds without ending the turn.
 
 #### Requirement 1C: Deterministic completion
 
@@ -112,6 +118,7 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 - **Assisted_Call**: The V2 Twilio flow that navigates a supported provider phone tree, waits on hold, and bridges the applicant to a human; the applicant speaks for themselves.
 - **Conversation_Locale**: One of `en-US`, `es-US`, or `zh-CN`, selected before the conversation begins and used by visible copy, speech recognition, speech synthesis, confirmations, and follow-up questions.
 - **Application_Phase**: The internal state of the continuous application conversation: `language`, `introduction`, `document_readiness`, `intake`, `issue_resolution`, `completion_review`, or `ready`.
+- **Conversation_Orchestrator**: The in-session controller that stages a candidate answer, carries recent confirmed turns into extraction, chooses the next unresolved question or targeted follow-up, and combines acknowledgement with that next prompt.
 - **Question_Registry**: The deterministic list of required, conditional, and optional interview questions, including activation, unknown, completeness, localization, and field-mapping metadata.
 - **Completion_Engine**: The shared client/server rules that identify missing, deferred, unconfirmed, conflicting, or incomplete information and decide whether packet generation is allowed.
 - **Voice_Command**: A spoken navigation or correction instruction that is separated from application answers before extraction.

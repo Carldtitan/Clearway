@@ -33,10 +33,20 @@ describe("continuous microphone turn detection", () => {
     ).toBe(false);
   });
 
-  it("caps a spoken answer after thirty seconds", () => {
+  it("allows a natural pause inside a longer answer", () => {
     expect(
       shouldFinishRecording({
-        elapsedMs: 30_000,
+        elapsedMs: 12_000,
+        heardSpeech: true,
+        silenceMs: 1_800,
+      }),
+    ).toBe(false);
+  });
+
+  it("caps a spoken answer after two minutes", () => {
+    expect(
+      shouldFinishRecording({
+        elapsedMs: 120_000,
         heardSpeech: true,
         silenceMs: 0,
       }),

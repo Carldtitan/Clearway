@@ -14,7 +14,9 @@ export type VoiceTurnState =
   | "error";
 
 const SILENCE_AFTER_SPEECH_MS = 1_350;
-const MAX_ANSWER_MS = 30_000;
+const SILENCE_AFTER_LONG_ANSWER_MS = 2_200;
+const LONG_ANSWER_MS = 8_000;
+const MAX_ANSWER_MS = 120_000;
 const SPEECH_LEVEL = 0.022;
 
 export function useVoiceTurn(locale: SupportedLocale = "en-US") {
@@ -78,7 +80,13 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
     }
     if (streamRef.current?.active) return streamRef.current;
     setState("requesting");
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    });
     streamRef.current = stream;
     return stream;
   }, []);
@@ -423,8 +431,12 @@ export function shouldFinishRecording({
   silenceMs: number;
 }) {
   if (!heardSpeech) return false;
+  const silenceThreshold =
+    elapsedMs >= LONG_ANSWER_MS
+      ? SILENCE_AFTER_LONG_ANSWER_MS
+      : SILENCE_AFTER_SPEECH_MS;
   return (
-    (elapsedMs >= 1_800 && silenceMs >= SILENCE_AFTER_SPEECH_MS) ||
+    (elapsedMs >= 1_800 && silenceMs >= silenceThreshold) ||
     elapsedMs >= MAX_ANSWER_MS
   );
 }
