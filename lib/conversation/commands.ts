@@ -133,6 +133,7 @@ export function parseVoiceCommand(
   transcript: string,
   _locale?: SupportedLocale,
 ): ParsedVoiceCommand | null {
+  void _locale;
   const normalized = transcript
     .trim()
     .toLocaleLowerCase()

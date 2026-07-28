@@ -1,73 +1,46 @@
 "use client";
 
 import {
-  ClipboardCheck,
   FileStack,
   FolderClock,
-  LockKeyhole,
   MessageCircleMore,
-  SearchCheck,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
 
+import { GuidedApplication } from "@/components/application/guided-application";
 import { BrandMark } from "@/components/app/brand-mark";
 import { useApplicantCase } from "@/components/app/case-context";
-import { CheckFlow } from "@/components/check/check-flow";
-import { InterviewFlow } from "@/components/interview/interview-flow";
 import { PacketFlow } from "@/components/packet/packet-flow";
 import { RecordsTracker } from "@/components/records/records-tracker";
-import { ReviewFlow } from "@/components/review/review-flow";
-import type { ApplicantCase } from "@/lib/case/types";
+import type { UserStage } from "@/lib/case/types";
+import { copy, localized } from "@/lib/i18n/locales";
 import { cn } from "@/lib/utils";
 
-type Stage = ApplicantCase["stage"];
-
 interface StageItem {
-  id: Stage;
-  label: string;
-  shortLabel: string;
+  id: UserStage;
   icon: LucideIcon;
 }
 
 const stages: StageItem[] = [
-  { id: "check", label: "Check", shortLabel: "Check", icon: SearchCheck },
-  {
-    id: "interview",
-    label: "Interview",
-    shortLabel: "Interview",
-    icon: MessageCircleMore,
-  },
-  {
-    id: "review",
-    label: "Review",
-    shortLabel: "Review",
-    icon: ClipboardCheck,
-  },
-  { id: "packet", label: "Packet", shortLabel: "Packet", icon: FileStack },
-  {
-    id: "records",
-    label: "Records",
-    shortLabel: "Records",
-    icon: FolderClock,
-  },
+  { id: "application", icon: MessageCircleMore },
+  { id: "documents", icon: FileStack },
+  { id: "records", icon: FolderClock },
 ];
-
-const mobileStages = stages.filter((stage) => stage.id !== "review");
 
 export function Workspace() {
   const { applicantCase, dispatch } = useApplicantCase();
-  const activeIndex = stages.findIndex(
-    (stage) => stage.id === applicantCase.stage,
-  );
+  const activeStage = normalizeStage(applicantCase.stage);
+  const locale = applicantCase.conversationLocale ?? "en-US";
+  const activeIndex = stages.findIndex((stage) => stage.id === activeStage);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
-  }, [applicantCase.stage]);
+  }, [activeStage]);
 
-  function navigate(stage: Stage) {
+  function navigate(stage: UserStage) {
     const destinationIndex = stages.findIndex((item) => item.id === stage);
     if (destinationIndex <= activeIndex) {
       dispatch({ type: "SET_STAGE", stage });
@@ -75,13 +48,15 @@ export function Workspace() {
   }
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[15.5rem_minmax(0,1fr)]">
+    <div className="min-h-dvh lg:grid lg:grid-cols-[14.5rem_minmax(0,1fr)]">
       <aside className="hidden border-r border-border bg-surface lg:flex lg:min-h-dvh lg:flex-col lg:p-5">
         <div className="flex items-center gap-3 px-2 py-1">
           <BrandMark />
           <div>
             <p className="font-bold leading-none">SSDI Assistant</p>
-            <p className="mt-1 text-xs text-muted">Application workspace</p>
+            <p className="mt-1 text-xs text-muted">
+              {localized(copy.productDescription, locale)}
+            </p>
           </div>
         </div>
 
@@ -89,7 +64,7 @@ export function Workspace() {
           <ol className="grid gap-1.5">
             {stages.map((stage, index) => {
               const Icon = stage.icon;
-              const active = applicantCase.stage === stage.id;
+              const active = activeStage === stage.id;
               const reachable = index <= activeIndex;
               const complete = index < activeIndex;
               return (
@@ -121,23 +96,13 @@ export function Workspace() {
                         <Icon aria-hidden="true" className="size-4" />
                       )}
                     </span>
-                    <span>{stage.label}</span>
+                    <span>{stageLabel(stage.id, locale)}</span>
                   </button>
                 </li>
               );
             })}
           </ol>
         </nav>
-
-        <div className="mt-auto rounded-[var(--radius-control)] bg-surface-subtle p-3.5">
-          <p className="flex items-center gap-2 text-sm font-bold">
-            <LockKeyhole aria-hidden="true" className="size-4 text-primary" />
-            Private session
-          </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted">
-            Nothing is saved when this tab closes.
-          </p>
-        </div>
       </aside>
 
       <div className="min-w-0">
@@ -146,15 +111,14 @@ export function Workspace() {
             <BrandMark />
             <p className="font-bold">SSDI Assistant</p>
           </div>
-          <p className="hidden text-sm text-muted lg:block">
-            {applicantCase.mode === "synthetic_demo"
-              ? "Demo case · Elena Rivera"
-              : "Current session"}
+          <p className="hidden max-w-[48rem] text-sm text-muted lg:block">
+            {localized(copy.productDescription, locale)}
           </p>
-          <p className="flex items-center gap-1.5 text-xs font-bold text-muted">
-            <LockKeyhole aria-hidden="true" className="size-3.5" />
-            Not saved
-          </p>
+          {applicantCase.conversationLocale ? (
+            <p className="text-xs font-bold text-muted">
+              {stageLabel(activeStage, locale)}
+            </p>
+          ) : null}
         </header>
 
         <main className="px-4 pb-28 pt-5 sm:px-8 lg:px-12 lg:pb-12">
@@ -163,52 +127,63 @@ export function Workspace() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               initial={{ opacity: 0 }}
-              key={applicantCase.stage}
+              key={activeStage}
               transition={{ duration: 0.16 }}
             >
-              {applicantCase.stage === "check" ? <CheckFlow /> : null}
-              {applicantCase.stage === "interview" ? <InterviewFlow /> : null}
-              {applicantCase.stage === "review" ? <ReviewFlow /> : null}
-              {applicantCase.stage === "packet" ? <PacketFlow /> : null}
-              {applicantCase.stage === "records" ? <RecordsTracker /> : null}
+              {activeStage === "application" ? <GuidedApplication /> : null}
+              {activeStage === "documents" ? <PacketFlow /> : null}
+              {activeStage === "records" ? <RecordsTracker /> : null}
             </motion.div>
           </AnimatePresence>
         </main>
       </div>
 
-      <nav
-        aria-label="Application stages"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/97 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur lg:hidden"
-      >
-        <ol className="grid grid-cols-4">
-          {mobileStages.map((stage) => {
-            const Icon = stage.icon;
-            const stageIndex = stages.findIndex((item) => item.id === stage.id);
-            const active =
-              applicantCase.stage === stage.id ||
-              (applicantCase.stage === "review" && stage.id === "interview");
-            const reachable = stageIndex <= activeIndex;
-            return (
-              <li key={stage.id}>
-                <button
-                  aria-current={active ? "step" : undefined}
-                  className={cn(
-                    "flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-lg text-[0.6875rem] font-bold",
-                    active ? "text-primary" : "text-muted",
-                    !reachable && "opacity-45",
-                  )}
-                  disabled={!reachable}
-                  onClick={() => navigate(stage.id)}
-                  type="button"
-                >
-                  <Icon aria-hidden="true" className="size-5" />
-                  {stage.shortLabel}
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+      {applicantCase.conversationLocale ? (
+        <nav
+          aria-label="Application stages"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/97 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur lg:hidden"
+        >
+          <ol className="grid grid-cols-3">
+            {stages.map((stage, index) => {
+              const Icon = stage.icon;
+              const active = activeStage === stage.id;
+              const reachable = index <= activeIndex;
+              return (
+                <li key={stage.id}>
+                  <button
+                    aria-current={active ? "step" : undefined}
+                    className={cn(
+                      "flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-lg text-[0.6875rem] font-bold",
+                      active ? "text-primary" : "text-muted",
+                      !reachable && "opacity-45",
+                    )}
+                    disabled={!reachable}
+                    onClick={() => navigate(stage.id)}
+                    type="button"
+                  >
+                    <Icon aria-hidden="true" className="size-5" />
+                    {stageLabel(stage.id, locale)}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+      ) : null}
     </div>
   );
+}
+
+function normalizeStage(
+  stage: ReturnType<typeof useApplicantCase>["applicantCase"]["stage"],
+): UserStage {
+  if (stage === "documents" || stage === "packet") return "documents";
+  if (stage === "records") return "records";
+  return "application";
+}
+
+function stageLabel(stage: UserStage, locale: "en-US" | "es-US" | "zh-CN") {
+  if (stage === "application") return localized(copy.application, locale);
+  if (stage === "documents") return localized(copy.documents, locale);
+  return localized(copy.records, locale);
 }

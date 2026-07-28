@@ -1,0 +1,1305 @@
+"use client";
+
+import {
+  Check,
+  CheckCircle2,
+  CircleAlert,
+  Keyboard,
+  Mic,
+  Pause,
+  RotateCcw,
+  Send,
+  Volume2,
+} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { useApplicantCase } from "@/components/app/case-context";
+import { Button } from "@/components/ui/button";
+import Orb from "@/components/visual/orb";
+import { useVoiceTurn } from "@/components/voice/use-voice-turn";
+import type {
+  CaseAction,
+  InterviewTurn,
+  SupportedLocale,
+} from "@/lib/case/types";
+import {
+  confirmationPrompt,
+  confirmationRetry,
+  explicitNone,
+  parseLocalizedYesNo,
+  readyAnswer,
+} from "@/lib/conversation/answers";
+import {
+  parseVoiceCommand,
+  type ParsedVoiceCommand,
+} from "@/lib/conversation/commands";
+import {
+  evaluateCompleteness,
+  type CompletionResult,
+} from "@/lib/conversation/completeness";
+import {
+  QUESTION_REGISTRY,
+  nextQuestion,
+  questionById,
+  type QuestionDefinition,
+} from "@/lib/conversation/questions";
+import { applyInterviewExtraction } from "@/lib/extraction/apply";
+import { requestInterviewExtraction } from "@/lib/extraction/client";
+import type { InterviewExtraction } from "@/lib/extraction/schema";
+import {
+  copy,
+  localeDefinition,
+  localized,
+  preparationItems,
+  SUPPORTED_LOCALES,
+} from "@/lib/i18n/locales";
+import { parseSpokenNumber } from "@/lib/voice/answer-parsers";
+
+type ConversationStatus =
+  | "idle"
+  | "introducing"
+  | "waiting"
+  | "asking"
+  | "extracting"
+  | "confirming"
+  | "paused"
+  | "review"
+  | "complete"
+  | "error";
+
+interface PendingAnswer {
+  question: QuestionDefinition;
+  transcript: string;
+  turnId: string;
+  source: Extract<InterviewTurn["source"], "voice" | "typed">;
+  summary: string;
+  extraction: InterviewExtraction | null;
+  directActions: CaseAction[];
+}
+
+export function GuidedApplication() {
+  const {
+    applicantCase,
+    dispatch,
+    setVoiceSessionActive,
+  } = useApplicantCase();
+  const locale = applicantCase.conversationLocale ?? "en-US";
+  const voice = useVoiceTurn(locale);
+  const [status, setStatus] = useState<ConversationStatus>(
+    applicantCase.applicationPhase === "ready" ? "complete" : "idle",
+  );
+  const [cursor, setCursor] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [typedMode, setTypedMode] = useState(false);
+  const [typedAnswer, setTypedAnswer] = useState("");
+  const [pending, setPending] = useState<PendingAnswer | null>(null);
+  const runIdRef = useRef(0);
+  const caseRef = useRef(applicantCase);
+  const localeResumeQuestionIdRef = useRef<string | null>(null);
+  const languageStartLocaleRef = useRef<SupportedLocale | null>(null);
+  const currentQuestion = questionById(applicantCase.activeQuestionId);
+  const completion = useMemo(
+    () => evaluateCompleteness(applicantCase, locale),
+    [applicantCase, locale],
+  );
+
+  useEffect(() => {
+    caseRef.current = applicantCase;
+  }, [applicantCase]);
+
+  useEffect(() => {
+    const languageStartLocale = languageStartLocaleRef.current;
+    if (languageStartLocale === locale) {
+      languageStartLocaleRef.current = null;
+      void continueLanguageStart(languageStartLocale);
+    }
+    const resumeQuestionId = localeResumeQuestionIdRef.current;
+    if (resumeQuestionId) {
+      localeResumeQuestionIdRef.current = null;
+      const question = questionById(resumeQuestionId);
+      if (question) {
+        window.setTimeout(() => void askQuestion(question), 120);
+      }
+    }
+    // Locale state must render before localized speech/listen resumes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
+
+  async function chooseLanguage(nextLocale: SupportedLocale) {
+    const runId = ++runIdRef.current;
+    const definition = localeDefinition(nextLocale);
+    try {
+      await voice.activate();
+      if (runId !== runIdRef.current) return;
+      dispatch({ type: "SET_CONVERSATION_LOCALE", locale: nextLocale });
+      dispatch({
+        type: "EDIT_VALUE",
+        path: "applicant.preferredLanguage",
+        value: definition.preferredLanguageValue,
+      });
+      dispatch({ type: "SET_APPLICATION_PHASE", phase: "introduction" });
+      setVoiceSessionActive(true);
+      setStatus("introducing");
+      setError(null);
+      languageStartLocaleRef.current = nextLocale;
+    } catch (startError) {
+      if (runId !== runIdRef.current) return;
+      setTypedMode(true);
+      setStatus("error");
+      setError(
+        startError instanceof Error
+          ? startError.message
+          : localized(copy.readyPrompt, nextLocale),
+      );
+    }
+  }
+
+  async function continueLanguageStart(nextLocale: SupportedLocale) {
+    const runId = runIdRef.current;
+    try {
+      await voice.speak(localized(copy.introduction, nextLocale));
+      if (runId !== runIdRef.current) return;
+      dispatch({
+        type: "SET_APPLICATION_PHASE",
+        phase: "document_readiness",
+      });
+      setStatus("waiting");
+      const answer = await voice.listen();
+      if (runId !== runIdRef.current) return;
+      if (readyAnswer(answer, nextLocale)) {
+        beginIntake();
+      } else {
+        setTypedMode(true);
+        setError(localized(copy.readyPrompt, nextLocale));
+      }
+    } catch (startError) {
+      if (runId !== runIdRef.current) return;
+      setTypedMode(true);
+      setStatus("error");
+      setError(
+        startError instanceof Error
+          ? startError.message
+          : localized(copy.readyPrompt, nextLocale),
+      );
+    }
+  }
+
+  function beginIntake() {
+    ++runIdRef.current;
+    setError(null);
+    setTypedMode(false);
+    dispatch({ type: "SET_APPLICATION_PHASE", phase: "intake" });
+    const first = nextQuestion(caseRef.current);
+    if (!first) {
+      void finishIntake();
+      return;
+    }
+    const nextCursor = QUESTION_REGISTRY.findIndex(
+      (entry) => entry.id === first.id,
+    );
+    setCursor(nextCursor);
+    window.setTimeout(() => void askAt(nextCursor), 120);
+  }
+
+  async function askAt(startIndex: number) {
+    const currentCase = caseRef.current;
+    let index = startIndex;
+    let question: QuestionDefinition | null = null;
+    while (index < QUESTION_REGISTRY.length) {
+      const candidate = QUESTION_REGISTRY[index];
+      const deferred = currentCase.deferredItems.some(
+        (item) => item.questionId === candidate.id,
+      );
+      if (
+        candidate.isActive(currentCase) &&
+        !candidate.isAnswered(currentCase) &&
+        !deferred
+      ) {
+        question = candidate;
+        break;
+      }
+      index += 1;
+    }
+    if (!question) {
+      await finishIntake();
+      return;
+    }
+    setCursor(index);
+    await askQuestion(question);
+  }
+
+  async function askQuestion(question: QuestionDefinition) {
+    const runId = runIdRef.current;
+    dispatch({ type: "SET_ACTIVE_QUESTION", questionId: question.id });
+    setPending(null);
+    setError(null);
+    setTypedMode(false);
+    setStatus("asking");
+    try {
+      const transcript = await voice.ask(localized(question.prompt, locale));
+      if (runId !== runIdRef.current) return;
+      await processTranscript(question, transcript, "voice");
+    } catch (askError) {
+      if (runId !== runIdRef.current) return;
+      setTypedMode(true);
+      setStatus("error");
+      setError(
+        askError instanceof Error
+          ? askError.message
+          : "The microphone is unavailable.",
+      );
+    }
+  }
+
+  async function processTranscript(
+    question: QuestionDefinition,
+    rawTranscript: string,
+    source: PendingAnswer["source"],
+  ) {
+    const transcript = rawTranscript.trim();
+    if (!transcript) {
+      setError(localized(copy.typeAnswer, locale));
+      return;
+    }
+    const command = parseVoiceCommand(transcript, locale);
+    if (command) {
+      await handleCommand(command, question);
+      return;
+    }
+
+    const turnId = `turn-${crypto.randomUUID()}`;
+    dispatch({
+      type: "ADD_INTERVIEW_TURN",
+      turn: {
+        id: turnId,
+        prompt: localized(question.prompt, locale),
+        transcript,
+        source,
+        status: "extracting",
+        createdAt: new Date().toISOString(),
+        locale,
+      },
+    });
+    setStatus("extracting");
+    setError(null);
+
+    try {
+      const nextPending = await prepareAnswer(
+        question,
+        transcript,
+        source,
+        turnId,
+      );
+      setPending(nextPending);
+      setStatus("confirming");
+      if (source === "voice") {
+        await confirmVoiceAnswer(nextPending);
+      }
+    } catch (processingError) {
+      dispatch({
+        type: "UPDATE_INTERVIEW_TURN",
+        turnId,
+        patch: { status: "failed" },
+      });
+      setTypedMode(true);
+      setStatus("error");
+      setError(
+        processingError instanceof Error
+          ? processingError.message
+          : "The answer was kept, but could not be processed.",
+      );
+    }
+  }
+
+  async function prepareAnswer(
+    question: QuestionDefinition,
+    transcript: string,
+    source: PendingAnswer["source"],
+    turnId: string,
+  ): Promise<PendingAnswer> {
+    const directActions: CaseAction[] = [];
+    let extraction: InterviewExtraction | null = null;
+    let summary = transcript;
+
+    if (question.answerKind === "yes_no") {
+      const parsed = parseLocalizedYesNo(transcript, locale);
+      if (!parsed.ok) {
+        throw new Error(confirmationRetry(locale));
+      }
+      summary = parsed.spoken;
+      if (question.id === "current-work") {
+        directActions.push({
+          type: "EDIT_VALUE",
+          path: "currentlyEarning",
+          value: parsed.value,
+        });
+      } else if (question.id === "statutory-blindness") {
+        directActions.push({
+          type: "SET_ELIGIBILITY_INPUT",
+          patch: { statutorilyBlind: parsed.value },
+        });
+      } else if (question.id === "condition-duration") {
+        directActions.push({
+          type: "SET_ELIGIBILITY_INPUT",
+          patch: { conditionExpectedToLast12Months: parsed.value },
+        });
+      }
+    } else if (question.answerKind === "currency") {
+      const amount = parseSpokenNumber(transcript);
+      if (amount === null || amount < 0) {
+        throw new Error(
+          locale === "es-US"
+            ? "Diga una cantidad en dólares."
+            : locale === "zh-CN"
+              ? "请说出美元金额。"
+              : "Say a dollar amount.",
+        );
+      }
+      summary = new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      }).format(amount);
+      directActions.push({
+        type: "SET_ELIGIBILITY_INPUT",
+        patch: { monthlyEarningsUsd: amount },
+      });
+    } else if (
+      isCollectionQuestion(question) &&
+      explicitNone(transcript, locale)
+    ) {
+      const collection = question.answerKind;
+      const hasItems = caseRef.current[collection].length > 0;
+      directActions.push({
+        type: "SET_COLLECTION_COMPLETION",
+        collection,
+        status: hasItems ? "complete_with_items" : "complete_none",
+      });
+      summary = transcript;
+    } else {
+      extraction = await requestInterviewExtraction({
+        turnId,
+        locale,
+        topic: question.id,
+        prompt: localized(question.prompt, locale),
+        transcript,
+      });
+      summary = extraction.confirmationText?.trim() || extraction.summary;
+
+      if (isCollectionQuestion(question)) {
+        const collection = question.answerKind;
+        const extractedItems = extraction.facts.some(
+          (fact) => fact.kind === singularCollectionKind(collection),
+        );
+        directActions.push({
+          type: "SET_COLLECTION_COMPLETION",
+          collection,
+          status:
+            collection === "providers" &&
+            extraction.providerListStatus === "complete"
+              ? "complete_with_items"
+              : extractedItems
+                ? "in_progress"
+                : "unanswered",
+        });
+      }
+
+      if (question.id === "citizenship") {
+        const parsed = parseLocalizedYesNo(transcript, locale);
+        if (parsed.ok) {
+          directActions.push({
+            type: "EDIT_VALUE",
+            path: "nonCitizen",
+            value: !parsed.value,
+          });
+          if (parsed.value) {
+            directActions.push({
+              type: "EDIT_VALUE",
+              path: "applicant.citizenship",
+              value: "United States",
+            });
+          }
+        }
+      }
+      if (question.id === "date-of-birth") {
+        const date = factValue(extraction, "applicant.dateOfBirth");
+        if (date) {
+          directActions.push({
+            type: "SET_ELIGIBILITY_INPUT",
+            patch: { dateOfBirth: date },
+          });
+        }
+      }
+      if (question.id === "onset-date") {
+        const date = factValue(extraction, "condition.allegedOnsetDate");
+        if (date) {
+          directActions.push({
+            type: "SET_ELIGIBILITY_INPUT",
+            patch: { allegedOnsetDate: date },
+          });
+          if (caseRef.current.conditions.length) {
+            directActions.push({
+              type: "EDIT_VALUE",
+              path: "conditions.0.allegedOnsetDate",
+              value: date,
+            });
+          }
+        }
+      }
+      if (
+        question.id === "work-effects" &&
+        caseRef.current.conditions.length
+      ) {
+        const effects = extraction.facts
+          .filter((fact) => fact.field === "condition.workEffect")
+          .map((fact) => fact.value);
+        directActions.push({
+          type: "EDIT_VALUE",
+          path: "conditions.0.workEffects",
+          value: effects.length ? effects : [extraction.summary],
+        });
+      }
+    }
+
+    return {
+      question,
+      transcript,
+      turnId,
+      source,
+      summary,
+      extraction,
+      directActions,
+    };
+  }
+
+  async function confirmVoiceAnswer(answer: PendingAnswer) {
+    let confirmation = await voice.ask(
+      answer.extraction?.confirmationText?.trim()
+        ? `${answer.extraction.confirmationText} ${confirmationRetry(locale)}`
+        : confirmationPrompt(answer.summary, locale),
+    );
+    for (;;) {
+      const parsed = parseLocalizedYesNo(confirmation, locale);
+      if (!parsed.ok) {
+        confirmation = await voice.ask(confirmationRetry(locale));
+        continue;
+      }
+      if (!parsed.value) {
+        rejectPending(answer);
+        await voice.speak(localized(copy.answerNotConfirmed, locale));
+        await askQuestion(answer.question);
+        return;
+      }
+      commitPending(answer);
+      await voice.speak(localized(copy.answerConfirmed, locale));
+      window.setTimeout(() => void askAt(cursor), 120);
+      return;
+    }
+  }
+
+  function commitPending(answer: PendingAnswer) {
+    if (answer.extraction) {
+      applyInterviewExtraction(
+        dispatch,
+        answer.extraction,
+        answer.turnId,
+        {
+          confirmed: true,
+          source: answer.source,
+        },
+      );
+    }
+    answer.directActions.forEach(dispatch);
+    dispatch({
+      type: "UPDATE_INTERVIEW_TURN",
+      turnId: answer.turnId,
+      patch: {
+        status: "extracted",
+        canonicalSummary: answer.extraction?.summary ?? answer.summary,
+      },
+    });
+    dispatch({
+      type: "RESOLVE_DEFERRED_QUESTION",
+      questionId: answer.question.id,
+    });
+    setPending(null);
+    setTypedAnswer("");
+  }
+
+  function rejectPending(answer: PendingAnswer) {
+    dispatch({
+      type: "UPDATE_INTERVIEW_TURN",
+      turnId: answer.turnId,
+      patch: { status: "final" },
+    });
+    setPending(null);
+    setTypedAnswer("");
+  }
+
+  async function handleCommand(
+    command: ParsedVoiceCommand,
+    question: QuestionDefinition,
+  ) {
+    switch (command.command) {
+      case "repeat":
+        await askQuestion(question);
+        return;
+      case "explain":
+        await voice.speak(localized(question.explanation, locale));
+        await askQuestion(question);
+        return;
+      case "pause":
+        ++runIdRef.current;
+        voice.pause();
+        setStatus("paused");
+        await voice.speak(localized(copy.sessionPaused, locale));
+        return;
+      case "continue":
+        await askQuestion(question);
+        return;
+      case "go_back": {
+        const previous = Math.max(0, cursor - 1);
+        setCursor(previous);
+        await askAt(previous);
+        return;
+      }
+      case "correct": {
+        const confirmation = await voice.ask(
+          correctionTargetPrompt(question, locale),
+        );
+        const parsed = parseLocalizedYesNo(confirmation, locale);
+        if (parsed.ok && parsed.value) {
+          await askQuestion(question);
+        } else {
+          await voice.speak(localized(copy.answerNotConfirmed, locale));
+          await askQuestion(question);
+        }
+        return;
+      }
+      case "defer":
+        dispatch({
+          type: "DEFER_QUESTION",
+          item: {
+            questionId: question.id,
+            deferredAt: new Date().toISOString(),
+            reason: command.deferReason ?? "come_back_later",
+          },
+        });
+        await voice.speak(localized(copy.requiredCannotSkip, locale));
+        window.setTimeout(() => void askAt(cursor + 1), 120);
+        return;
+      case "status": {
+        const result = evaluateCompleteness(caseRef.current, locale);
+        await voice.speak(statusMessage(result, locale));
+        await askQuestion(question);
+        return;
+      }
+      case "change_language":
+        if (command.targetLocale) {
+          ++runIdRef.current;
+          dispatch({
+            type: "SET_CONVERSATION_LOCALE",
+            locale: command.targetLocale,
+          });
+          dispatch({
+            type: "EDIT_VALUE",
+            path: "applicant.preferredLanguage",
+            value: localeDefinition(command.targetLocale)
+              .preferredLanguageValue,
+          });
+          localeResumeQuestionIdRef.current = question.id;
+        }
+        return;
+      case "review":
+        await finishIntake();
+        return;
+      case "generate_packet":
+        if (evaluateCompleteness(caseRef.current, locale).ready) {
+          dispatch({ type: "SET_STAGE", stage: "documents" });
+        } else {
+          await voice.speak(incompleteMessage(locale));
+          await askQuestion(question);
+        }
+        return;
+      case "open_records":
+        dispatch({ type: "SET_STAGE", stage: "records" });
+        return;
+      case "download_packet":
+      case "mark_received":
+        await voice.speak(commandUnavailableHere(locale));
+        await askQuestion(question);
+        return;
+    }
+  }
+
+  async function finishIntake() {
+    dispatch({ type: "SET_ACTIVE_QUESTION", questionId: null });
+    dispatch({ type: "SET_APPLICATION_PHASE", phase: "issue_resolution" });
+    setStatus("review");
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
+    const result = evaluateCompleteness(caseRef.current, locale);
+    const unresolved = result.blocking.filter(
+      (issue) => issue.id !== "final-review",
+    );
+    if (unresolved.length) {
+      await voice.speak(unresolvedMessage(unresolved.length, locale));
+      return;
+    }
+    const confirmation = await voice.ask(finalReviewPrompt(locale));
+    const parsed = parseLocalizedYesNo(confirmation, locale);
+    if (parsed.ok && parsed.value) {
+      dispatch({ type: "SET_FINAL_REVIEW_APPROVED", approved: true });
+      dispatch({ type: "SET_APPLICATION_PHASE", phase: "ready" });
+      setStatus("complete");
+      await voice.speak(finalReadyMessage(locale));
+      dispatch({ type: "SET_STAGE", stage: "documents" });
+      return;
+    }
+    setStatus("review");
+  }
+
+  function resolveIssue(questionId: string) {
+    const index = QUESTION_REGISTRY.findIndex(
+      (entry) => entry.id === questionId,
+    );
+    if (index < 0) return;
+    setCursor(index);
+    dispatch({ type: "SET_APPLICATION_PHASE", phase: "issue_resolution" });
+    void askAt(index);
+  }
+
+  function submitTypedAnswer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      applicantCase.applicationPhase === "document_readiness" &&
+      readyAnswer(typedAnswer, locale)
+    ) {
+      setTypedAnswer("");
+      beginIntake();
+      return;
+    }
+    if (currentQuestion) {
+      void processTranscript(currentQuestion, typedAnswer, "typed");
+    }
+  }
+
+  function confirmTyped(confirmed: boolean) {
+    if (!pending) return;
+    if (!confirmed) {
+      rejectPending(pending);
+      return;
+    }
+    commitPending(pending);
+    window.setTimeout(() => void askAt(cursor), 120);
+  }
+
+  if (applicantCase.applicationPhase === "language") {
+    return <LanguageSelection onSelect={chooseLanguage} />;
+  }
+
+  return (
+    <div className="mx-auto grid w-full max-w-[75rem] gap-6 pb-24 pt-2 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-10 lg:pt-6">
+      <section className="min-w-0">
+        <header className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold text-primary">
+              {localized(copy.application, locale)}
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              {completion.answered} / {completion.total}
+            </p>
+          </div>
+          <LanguageMenu
+            locale={locale}
+            onChange={(nextLocale) => {
+              dispatch({
+                type: "SET_CONVERSATION_LOCALE",
+                locale: nextLocale,
+              });
+              dispatch({
+                type: "EDIT_VALUE",
+                path: "applicant.preferredLanguage",
+                value: localeDefinition(nextLocale).preferredLanguageValue,
+              });
+            }}
+          />
+        </header>
+
+        <div className="mt-5 overflow-hidden rounded-[1.15rem] border border-border bg-surface shadow-[0_22px_70px_oklch(0_0_0/0.055)]">
+          <div className="relative min-h-[11rem] overflow-hidden border-b border-border bg-[oklch(0.975_0.012_356.8)] sm:min-h-[13rem]">
+            <div className="absolute left-1/2 top-1/2 size-56 -translate-x-1/2 -translate-y-1/2 sm:size-64">
+              <Orb
+                backgroundColor="#fbf7f9"
+                forceHoverState={
+                  voice.state === "listening" || status === "asking"
+                }
+                hoverIntensity={0.35}
+                hue={330}
+              />
+            </div>
+            <VoiceState state={voice.state} status={status} />
+          </div>
+
+          <div className="p-5 sm:p-8">
+            {applicantCase.applicationPhase === "introduction" ||
+            applicantCase.applicationPhase === "document_readiness" ? (
+              <Preparation locale={locale} />
+            ) : null}
+
+            {currentQuestion ? (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0, y: 5 }}
+                  key={currentQuestion.id}
+                >
+                  <p className="text-sm font-bold text-muted">
+                    {Math.min(cursor + 1, completion.total)} / {completion.total}
+                  </p>
+                  <h1 className="mt-3 max-w-[22ch] text-3xl font-bold leading-[1.08] tracking-[-0.035em] text-balance sm:text-4xl">
+                    {localized(currentQuestion.prompt, locale)}
+                  </h1>
+                  <button
+                    className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-control)] px-2 text-sm font-bold text-primary hover:bg-primary-soft"
+                    onClick={() =>
+                      void voice.speak(
+                        localized(currentQuestion.explanation, locale),
+                      )
+                    }
+                    type="button"
+                  >
+                    <CircleAlert aria-hidden="true" className="size-4" />
+                    {locale === "es-US"
+                      ? "Por qué se necesita"
+                      : locale === "zh-CN"
+                        ? "为什么需要"
+                        : "Why it is needed"}
+                  </button>
+                </motion.div>
+              </AnimatePresence>
+            ) : null}
+
+            {status === "review" ? (
+              <ReviewIssues
+                completion={completion}
+                locale={locale}
+                onResolve={resolveIssue}
+              />
+            ) : null}
+
+            {error ? (
+              <p
+                aria-live="assertive"
+                className="mt-5 rounded-[var(--radius-control)] bg-danger-soft p-3.5 text-sm font-bold text-danger"
+              >
+                {error}
+              </p>
+            ) : null}
+
+            {pending && pending.source === "typed" ? (
+              <div className="mt-6 border-t border-border pt-5">
+                <p className="text-sm font-bold text-muted">
+                  {confirmationPrompt(pending.summary, locale)}
+                </p>
+                <div className="mt-4 flex gap-3">
+                  <Button onClick={() => confirmTyped(true)}>
+                    <Check aria-hidden="true" className="size-4" />
+                    {locale === "es-US"
+                      ? "Correcto"
+                      : locale === "zh-CN"
+                        ? "正确"
+                        : "Correct"}
+                  </Button>
+                  <Button
+                    onClick={() => confirmTyped(false)}
+                    variant="secondary"
+                  >
+                    {locale === "es-US"
+                      ? "Cambiar"
+                      : locale === "zh-CN"
+                        ? "修改"
+                        : "Change"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {typedMode ? (
+              <TypedAnswer
+                locale={locale}
+                onChange={setTypedAnswer}
+                onSubmit={submitTypedAnswer}
+                value={typedAnswer}
+              />
+            ) : null}
+
+            <ConversationControls
+              locale={locale}
+              onFinish={() => voice.finishAnswer()}
+              onPause={() => {
+                if (voice.state === "paused") voice.resume();
+                else voice.pause();
+              }}
+              onRepeat={() =>
+                currentQuestion
+                  ? void voice.speak(
+                      localized(currentQuestion.prompt, locale),
+                    )
+                  : void voice.speak(localized(copy.introduction, locale))
+              }
+              onType={() => setTypedMode((visible) => !visible)}
+              state={voice.state}
+            />
+          </div>
+        </div>
+      </section>
+
+      <ContextPanel applicantCase={applicantCase} locale={locale} />
+    </div>
+  );
+}
+
+function LanguageSelection({
+  onSelect,
+}: {
+  onSelect: (locale: SupportedLocale) => void;
+}) {
+  return (
+    <section className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-[58rem] flex-col justify-center py-8">
+      <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div>
+          <h1 className="max-w-[18ch] text-4xl font-bold leading-[1.03] tracking-[-0.04em] text-balance sm:text-5xl">
+            Which language would you like to use?
+          </h1>
+          <p className="mt-5 max-w-[43rem] text-lg leading-relaxed text-muted">
+            Prepare your SSDI application and organize the supporting records
+            through a guided conversation.
+          </p>
+          <div
+            aria-label="Language options"
+            className="mt-8 grid gap-3 sm:grid-cols-3"
+            role="group"
+          >
+            {SUPPORTED_LOCALES.map((entry) => (
+              <motion.button
+                className="group flex min-h-20 items-center justify-between rounded-[var(--radius-surface)] border border-border bg-surface px-5 text-left text-lg font-bold shadow-[0_8px_30px_oklch(0_0_0/0.04)] transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary-soft/45"
+                key={entry.id}
+                onClick={() => void onSelect(entry.id)}
+                type="button"
+                whileTap={{ scale: 0.985 }}
+              >
+                {entry.nativeLabel}
+                <span className="grid size-8 place-items-center rounded-full bg-surface-subtle text-xs text-muted transition-colors group-hover:bg-surface group-hover:text-primary">
+                  {entry.shortLabel}
+                </span>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+        <div className="mx-auto size-60 lg:size-72">
+          <Orb backgroundColor="#fcf9fb" hoverIntensity={0.28} hue={330} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Preparation({ locale }: { locale: SupportedLocale }) {
+  return (
+    <div>
+      <p className="text-sm font-bold text-primary">
+        {localized(copy.preparing, locale)}
+      </p>
+      <h1 className="mt-3 max-w-[32ch] text-2xl font-bold leading-tight tracking-[-0.025em] text-balance sm:text-3xl">
+        {localized(copy.readyPrompt, locale)}
+      </h1>
+      <ul className="mt-6 flex flex-wrap gap-2.5">
+        {preparationItems.map((item) => (
+          <li
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-surface-subtle px-3.5 text-sm font-bold"
+            key={item.id}
+          >
+            <Check aria-hidden="true" className="size-3.5 text-success" />
+            {localized(item.label, locale)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function VoiceState({
+  state,
+  status,
+}: {
+  state: ReturnType<typeof useVoiceTurn>["state"];
+  status: ConversationStatus;
+}) {
+  const label =
+    state === "listening"
+      ? "Listening"
+      : state === "speaking"
+        ? "Speaking"
+        : state === "processing" || status === "extracting"
+          ? "Checking your answer"
+          : status === "paused"
+            ? "Paused"
+            : "Ready";
+  return (
+    <p
+      aria-live="polite"
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-border bg-surface/95 px-3.5 py-1.5 text-xs font-bold shadow-sm"
+    >
+      {label}
+    </p>
+  );
+}
+
+function ConversationControls({
+  locale,
+  onFinish,
+  onPause,
+  onRepeat,
+  onType,
+  state,
+}: {
+  locale: SupportedLocale;
+  onFinish: () => void;
+  onPause: () => void;
+  onRepeat: () => void;
+  onType: () => void;
+  state: ReturnType<typeof useVoiceTurn>["state"];
+}) {
+  return (
+    <div className="mt-7 flex flex-wrap items-center gap-2 border-t border-border pt-5">
+      {state === "listening" ? (
+        <Button onClick={onFinish}>
+          <Check aria-hidden="true" className="size-4" />
+          {locale === "es-US"
+            ? "Terminé de responder"
+            : locale === "zh-CN"
+              ? "回答完毕"
+              : "I’m done speaking"}
+        </Button>
+      ) : null}
+      {state === "listening" || state === "paused" ? (
+        <Button onClick={onPause} variant="secondary">
+          {state === "paused" ? (
+            <Mic aria-hidden="true" className="size-4" />
+          ) : (
+            <Pause aria-hidden="true" className="size-4" />
+          )}
+          {state === "paused"
+            ? locale === "es-US"
+              ? "Continuar"
+              : locale === "zh-CN"
+                ? "继续"
+                : "Continue"
+            : locale === "es-US"
+              ? "Pausa"
+              : locale === "zh-CN"
+                ? "暂停"
+                : "Pause"}
+        </Button>
+      ) : null}
+      <Button onClick={onRepeat} size="small" variant="quiet">
+        <Volume2 aria-hidden="true" className="size-4" />
+        {locale === "es-US"
+          ? "Repetir"
+          : locale === "zh-CN"
+            ? "重复"
+            : "Repeat"}
+      </Button>
+      <Button onClick={onType} size="small" variant="quiet">
+        <Keyboard aria-hidden="true" className="size-4" />
+        {localized(copy.typeAnswer, locale)}
+      </Button>
+    </div>
+  );
+}
+
+function TypedAnswer({
+  locale,
+  onChange,
+  onSubmit,
+  value,
+}: {
+  locale: SupportedLocale;
+  onChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  value: string;
+}) {
+  return (
+    <form className="mt-6" onSubmit={onSubmit}>
+      <label className="text-sm font-bold" htmlFor="typed-answer">
+        {localized(copy.yourAnswer, locale)}
+      </label>
+      <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+        <textarea
+          autoFocus
+          className="min-h-24 flex-1 resize-y rounded-[var(--radius-control)] border border-border bg-surface px-4 py-3 leading-relaxed placeholder:text-muted"
+          id="typed-answer"
+          onChange={(event) => onChange(event.target.value)}
+          required
+          value={value}
+        />
+        <Button className="self-end" type="submit">
+          <Send aria-hidden="true" className="size-4" />
+          {localized(copy.sendAnswer, locale)}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function ReviewIssues({
+  completion,
+  locale,
+  onResolve,
+}: {
+  completion: CompletionResult;
+  locale: SupportedLocale;
+  onResolve: (questionId: string) => void;
+}) {
+  const issues = completion.blocking.filter(
+    (issue) => issue.id !== "final-review",
+  );
+  return (
+    <div>
+      <p className="text-sm font-bold text-primary">
+        {locale === "es-US"
+          ? "Revisión"
+          : locale === "zh-CN"
+            ? "核对"
+            : "Review"}
+      </p>
+      <h1 className="mt-3 text-3xl font-bold tracking-[-0.035em] text-balance">
+        {issues.length
+          ? unresolvedMessage(issues.length, locale)
+          : localized(copy.allQuestionsAnswered, locale)}
+      </h1>
+      <ul className="mt-6 divide-y divide-border border-y border-border">
+        {issues.map((issue) => (
+          <li
+            className="flex items-center justify-between gap-4 py-4"
+            key={issue.id}
+          >
+            <span className="font-bold">{issue.message}</span>
+            {issue.questionId ? (
+              <Button
+                onClick={() => onResolve(issue.questionId!)}
+                size="small"
+                variant="secondary"
+              >
+                {locale === "es-US"
+                  ? "Resolver"
+                  : locale === "zh-CN"
+                    ? "处理"
+                    : "Resolve"}
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ContextPanel({
+  applicantCase,
+  locale,
+}: {
+  applicantCase: ReturnType<typeof useApplicantCase>["applicantCase"];
+  locale: SupportedLocale;
+}) {
+  const recentTurns = applicantCase.interviewTurns.slice(-4).reverse();
+  const confirmedFacts = [
+    applicantCase.applicant.legalName.value,
+    applicantCase.applicant.phone.value,
+    applicantCase.conditions[0]?.name.value,
+    applicantCase.education.highestLevel.value,
+  ].filter(Boolean);
+  return (
+    <aside className="min-w-0 lg:sticky lg:top-20 lg:h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:border-l lg:border-border lg:pl-7 lg:pt-2">
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold">
+          {locale === "es-US"
+            ? "Datos confirmados"
+            : locale === "zh-CN"
+              ? "已确认资料"
+              : "Confirmed facts"}
+        </h2>
+        <CheckCircle2 aria-hidden="true" className="size-5 text-success" />
+      </div>
+      {confirmedFacts.length ? (
+        <ul className="mt-4 divide-y divide-border border-y border-border">
+          {confirmedFacts.map((fact) => (
+            <li className="py-3 text-sm font-bold" key={String(fact)}>
+              {String(fact)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm leading-relaxed text-muted">
+          {locale === "es-US"
+            ? "Los datos aparecerán después de que confirme cada respuesta."
+            : locale === "zh-CN"
+              ? "每次确认回答后，资料会显示在这里。"
+              : "Facts appear here after each answer is confirmed."}
+        </p>
+      )}
+
+      {recentTurns.length ? (
+        <details className="mt-6 rounded-[var(--radius-control)] border border-border bg-surface">
+          <summary className="flex min-h-12 cursor-pointer items-center justify-between px-3.5 text-sm font-bold">
+            {locale === "es-US"
+              ? "Transcripción reciente"
+              : locale === "zh-CN"
+                ? "最近对话记录"
+                : "Recent transcript"}
+            <RotateCcw aria-hidden="true" className="size-3.5 text-muted" />
+          </summary>
+          <ol className="border-t border-border px-3.5 py-2">
+            {recentTurns.map((turn) => (
+              <li className="py-2 text-sm leading-relaxed" key={turn.id}>
+                {turn.transcript}
+              </li>
+            ))}
+          </ol>
+        </details>
+      ) : null}
+    </aside>
+  );
+}
+
+function LanguageMenu({
+  locale,
+  onChange,
+}: {
+  locale: SupportedLocale;
+  onChange: (locale: SupportedLocale) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm font-bold">
+      <span className="sr-only">Conversation language</span>
+      <select
+        className="min-h-11 rounded-[var(--radius-control)] border border-border bg-surface px-3"
+        onChange={(event) =>
+          onChange(event.target.value as SupportedLocale)
+        }
+        value={locale}
+      >
+        {SUPPORTED_LOCALES.map((entry) => (
+          <option key={entry.id} value={entry.id}>
+            {entry.nativeLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function isCollectionQuestion(
+  question: QuestionDefinition,
+): question is QuestionDefinition & {
+  answerKind: "providers" | "medications" | "jobs" | "marriages" | "children";
+} {
+  return [
+    "providers",
+    "medications",
+    "jobs",
+    "marriages",
+    "children",
+  ].includes(question.answerKind);
+}
+
+function singularCollectionKind(
+  collection: "providers" | "medications" | "jobs" | "marriages" | "children",
+) {
+  return {
+    providers: "provider",
+    medications: "medication",
+    jobs: "job",
+    marriages: "marriage",
+    children: "child",
+  }[collection];
+}
+
+function factValue(
+  extraction: InterviewExtraction,
+  field: InterviewExtraction["facts"][number]["field"],
+) {
+  return extraction.facts.find((fact) => fact.field === field)?.value ?? null;
+}
+
+function correctionTargetPrompt(
+  question: QuestionDefinition,
+  locale: SupportedLocale,
+) {
+  const target = localized(question.prompt, locale);
+  return {
+    "en-US": `Do you want to replace your answer to: ${target}`,
+    "es-US": `¿Quiere reemplazar su respuesta a: ${target}`,
+    "zh-CN": `您要修改这个问题的回答吗：${target}`,
+  }[locale];
+}
+
+function statusMessage(
+  result: CompletionResult,
+  locale: SupportedLocale,
+) {
+  return {
+    "en-US": `${result.answered} of ${result.total} sections are complete. ${result.blocking.length} items still need attention.`,
+    "es-US": `${result.answered} de ${result.total} secciones están completas. ${result.blocking.length} elementos aún necesitan atención.`,
+    "zh-CN": `已完成 ${result.answered} 项，共 ${result.total} 项。还有 ${result.blocking.length} 项需要处理。`,
+  }[locale];
+}
+
+function unresolvedMessage(count: number, locale: SupportedLocale) {
+  return {
+    "en-US": `${count} ${count === 1 ? "answer needs" : "answers need"} your attention before the documents can be created.`,
+    "es-US": `${count} ${count === 1 ? "respuesta necesita" : "respuestas necesitan"} su atención antes de crear los documentos.`,
+    "zh-CN": `生成文件前，还有 ${count} 项回答需要处理。`,
+  }[locale];
+}
+
+function finalReviewPrompt(locale: SupportedLocale) {
+  return {
+    "en-US":
+      "You have answered every required question. Are these answers complete and ready to use in your documents?",
+    "es-US":
+      "Ha respondido todas las preguntas necesarias. ¿Están completas y listas para usarse en sus documentos?",
+    "zh-CN": "所有必答问题都已完成。您确认这些回答完整并可用于生成文件吗？",
+  }[locale];
+}
+
+function finalReadyMessage(locale: SupportedLocale) {
+  return {
+    "en-US": "Your answers are ready. I’m opening your documents.",
+    "es-US": "Sus respuestas están listas. Abriré sus documentos.",
+    "zh-CN": "您的回答已准备好。现在打开文件页面。",
+  }[locale];
+}
+
+function incompleteMessage(locale: SupportedLocale) {
+  return {
+    "en-US": "Some required answers still need attention.",
+    "es-US": "Algunas respuestas necesarias aún requieren atención.",
+    "zh-CN": "还有一些必答内容需要处理。",
+  }[locale];
+}
+
+function commandUnavailableHere(locale: SupportedLocale) {
+  return {
+    "en-US": "That action is available in Documents or Records.",
+    "es-US": "Esa acción está disponible en Documentos o Expedientes.",
+    "zh-CN": "该操作可在文件或医疗记录页面中使用。",
+  }[locale];
+}
