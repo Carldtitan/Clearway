@@ -9,6 +9,7 @@ import {
   Mic,
   Pause,
   Play,
+  RotateCcw,
   Sparkles,
   Square,
   Volume2,
@@ -57,30 +58,55 @@ interface PendingTurn {
   turnId: string;
 }
 
+type FailedTurn = Omit<PendingTurn, "extraction">;
+
 const topics: InterviewTopic[] = [
   {
-    id: "identity",
-    label: "About you",
+    id: "legal_name",
+    label: "Your name",
+    prompt: "What is your full legal name?",
+  },
+  {
+    id: "other_names",
+    label: "Other names",
     prompt:
-      "Tell me your full legal name, any other names on your records, your Social Security number, date and place of birth, citizenship, and preferred language.",
+      "Have you used any other names on work, school, or medical records? Say no if you have not.",
+  },
+  {
+    id: "identity",
+    label: "Identity",
+    prompt:
+      "What is your Social Security number, date of birth, and place of birth? You may say one item at a time and pause between them.",
+  },
+  {
+    id: "language_citizenship",
+    label: "Language",
+    prompt:
+      "Are you a United States citizen, and what language do you prefer for this interview?",
+  },
+  {
+    id: "address",
+    label: "Address",
+    prompt:
+      "What is your full mailing address, including the city, state, and ZIP code?",
   },
   {
     id: "contact",
     label: "Contact",
     prompt:
-      "What is your full mailing address, phone number, and email address? Say each part slowly.",
+      "What phone number and email address should Social Security use to reach you?",
   },
   {
     id: "conditions",
     label: "Health",
     prompt:
-      "Name each physical or mental condition that limits you. For each one, tell me when it began, the symptoms, and exactly how it affects work.",
+      "Tell me about one physical or mental condition that limits you: its name, when it began limiting work, the symptoms, and what it stops you from doing at work. You can include the next condition in the same answer.",
   },
   {
     id: "providers",
     label: "Care",
     prompt:
-      "Tell me every doctor, clinic, hospital, therapist, or other place that treated any condition. Include the name, location, phone number, what they treated, and first and most recent visit if you know them. Finish by saying whether there are any others.",
+      "Tell me about one doctor, clinic, hospital, therapist, or other place that treated you. Include the name, location, phone number, what they treated, and first and most recent visit if you know them. If your list is finished, say there are no more providers.",
   },
   {
     id: "medications",
@@ -92,7 +118,13 @@ const topics: InterviewTopic[] = [
     id: "education",
     label: "Education",
     prompt:
-      "What is the highest grade or college year you completed, when and where did you complete it, were you in special education, and have you had job training? Also tell me the written language you use most.",
+      "What is the highest grade or college year you completed, when and where did you complete it, and were you in special education?",
+  },
+  {
+    id: "training",
+    label: "Training",
+    prompt:
+      "Have you completed any job training, trade school, or certification? Tell me what it was, where you trained, and the written language you use most.",
   },
   {
     id: "jobs",
@@ -101,16 +133,34 @@ const topics: InterviewTopic[] = [
       "Tell me about every job you had in the five years before your condition stopped or limited your work. For each job include dates, pay, hours, duties, lifting, standing, walking, sitting, tools, supervision, reports, and why it ended.",
   },
   {
-    id: "family",
-    label: "Family",
+    id: "marriages",
+    label: "Marriage",
     prompt:
-      "Tell me about current or former marriages and any children. Include names, dates, and how a marriage ended. You may say you have none. Social Security numbers can be added only if you know them.",
+      "Have you ever been married? For each marriage, tell me your spouse's name, when it began, and when and how it ended if it ended.",
   },
   {
-    id: "other",
-    label: "Final details",
+    id: "children",
+    label: "Children",
     prompt:
-      "Have you served in the military, worked during the last year, or earned money recently? Are your bank details available for direct deposit? Answer each part.",
+      "Do you have any children? Tell me each child's name and date of birth. Include a Social Security number only if you know it.",
+  },
+  {
+    id: "military",
+    label: "Military",
+    prompt:
+      "Have you ever served in the United States military?",
+  },
+  {
+    id: "recent_work",
+    label: "Recent work",
+    prompt:
+      "Did you work at any time during the last year, and are you earning any money from work now?",
+  },
+  {
+    id: "bank",
+    label: "Direct deposit",
+    prompt:
+      "Do you have your bank routing and account information available for direct deposit? Do not say the numbers now; I only need to know whether you have them ready.",
   },
 ];
 
@@ -154,6 +204,7 @@ export function InterviewFlow() {
   const [prompt, setPrompt] = useState(topics[0].prompt);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [pending, setPending] = useState<PendingTurn | null>(null);
+  const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
   const [lastExtraction, setLastExtraction] =
     useState<InterviewExtraction | null>(null);
   const [capturedFacts, setCapturedFacts] = useState<
@@ -243,8 +294,8 @@ export function InterviewFlow() {
   async function confirmVoiceTurn(nextPending: PendingTurn, runId: number) {
     setStatus("confirming");
     let clarification =
-      `I heard this: ${nextPending.extraction.summary} ` +
-      "Is that accurate? Say yes to save it, or no to answer again.";
+      `So I am going to put down: ${nextPending.extraction.summary} ` +
+      "Is that right? Say yes to save it, or no to answer again.";
     for (;;) {
       const confirmation = await voice.ask(clarification);
       if (runId !== runIdRef.current) return;
@@ -307,6 +358,7 @@ export function InterviewFlow() {
     });
     setStatus("extracting");
     setError(null);
+    setFailedTurn(null);
     try {
       const extraction =
         source === "demo"
@@ -326,6 +378,7 @@ export function InterviewFlow() {
         turnId,
       } satisfies PendingTurn;
       setPending(nextPending);
+      setFailedTurn(null);
       setLastExtraction(extraction);
       setStatus("confirming");
       return nextPending;
@@ -335,13 +388,93 @@ export function InterviewFlow() {
         turnId,
         patch: { status: "failed" },
       });
+      const failed = {
+        prompt: currentPrompt,
+        source,
+        topicIndex: currentTopicIndex,
+        transcript,
+        turnId,
+      } satisfies FailedTurn;
+      setFailedTurn(failed);
       setStatus("error");
       setError(
         extractionError instanceof Error
           ? extractionError.message
           : "Your transcript is safe, but fact extraction failed.",
       );
+      if (source === "voice") {
+        await offerSpokenExtractionRetry(failed);
+      }
       return null;
+    }
+  }
+
+  async function retryPreservedExtraction(
+    failed: FailedTurn,
+  ): Promise<PendingTurn | null> {
+    setStatus("extracting");
+    setError(null);
+    dispatch({
+      type: "UPDATE_INTERVIEW_TURN",
+      turnId: failed.turnId,
+      patch: { status: "extracting" },
+    });
+    try {
+      const extraction = await requestExtraction(
+        failed.turnId,
+        topics[failed.topicIndex].id,
+        failed.prompt,
+        failed.transcript,
+      );
+      const nextPending = { ...failed, extraction } satisfies PendingTurn;
+      setPending(nextPending);
+      setFailedTurn(null);
+      setLastExtraction(extraction);
+      setStatus("confirming");
+      dispatch({
+        type: "UPDATE_INTERVIEW_TURN",
+        turnId: failed.turnId,
+        patch: { status: "extracting" },
+      });
+      return nextPending;
+    } catch (retryError) {
+      dispatch({
+        type: "UPDATE_INTERVIEW_TURN",
+        turnId: failed.turnId,
+        patch: { status: "failed" },
+      });
+      setStatus("error");
+      setError(
+        retryError instanceof Error
+          ? retryError.message
+          : "The same answer could not be processed. It is still in the transcript.",
+      );
+      return null;
+    }
+  }
+
+  async function offerSpokenExtractionRetry(failed: FailedTurn) {
+    try {
+      const answer = await voice.ask(
+        "I kept your answer, but I could not turn it into form facts. Would you like me to try the same answer again?",
+      );
+      const parsed = parseYesNo(answer);
+      if (!parsed.ok || !parsed.value) {
+        await voice.speak(
+          "Okay. Your answer is still in the transcript. You can retry it or use the keyboard control.",
+        );
+        return;
+      }
+      const nextPending = await retryPreservedExtraction(failed);
+      if (nextPending) {
+        await confirmVoiceTurn(nextPending, runIdRef.current);
+      } else {
+        await voice.speak(
+          "That service is still unavailable. Your answer remains safe in the transcript.",
+        );
+      }
+    } catch {
+      // Visible retry and keyboard controls remain available.
     }
   }
 
@@ -509,10 +642,10 @@ export function InterviewFlow() {
                     level={voice.level}
                     onFinish={voice.finishAnswer}
                     onPause={voice.pause}
-                    onReplay={() =>
+                  onReplay={() =>
                       void voice.speak(
                         status === "confirming" && pending
-                          ? `I heard: ${pending.extraction.summary}. Is that accurate?`
+                          ? `So I am going to put down: ${pending.extraction.summary}. Is that right?`
                           : prompt,
                       )
                     }
@@ -558,18 +691,44 @@ export function InterviewFlow() {
                   <CircleAlert aria-hidden="true" className="size-4" />
                   {error || voice.error}
                 </p>
-                <Button
-                  onClick={() => {
-                    setMode("typed");
-                    setStatus("asking");
-                    setError(null);
-                  }}
-                  size="small"
-                  variant="secondary"
-                >
-                  <Keyboard aria-hidden="true" className="size-4" />
-                  Continue by keyboard
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {failedTurn ? (
+                    <Button
+                      onClick={() => {
+                        void retryPreservedExtraction(failedTurn).then(
+                          (nextPending) => {
+                            if (
+                              nextPending &&
+                              failedTurn.source === "voice"
+                            ) {
+                              void confirmVoiceTurn(
+                                nextPending,
+                                runIdRef.current,
+                              );
+                            }
+                          },
+                        );
+                      }}
+                      size="small"
+                      variant="secondary"
+                    >
+                      <RotateCcw aria-hidden="true" className="size-4" />
+                      Retry this answer
+                    </Button>
+                  ) : null}
+                  <Button
+                    onClick={() => {
+                      setMode("typed");
+                      setStatus("asking");
+                      setError(null);
+                    }}
+                    size="small"
+                    variant="secondary"
+                  >
+                    <Keyboard aria-hidden="true" className="size-4" />
+                    Continue by keyboard
+                  </Button>
+                </div>
               </div>
             ) : null}
 

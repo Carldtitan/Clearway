@@ -120,9 +120,9 @@ describe("InterviewFlow", () => {
     await waitFor(() => expect(voiceMocks.ask).toHaveBeenCalledTimes(3));
     expect(voiceMocks.ask.mock.calls[0][0]).toMatch(/full legal name/i);
     expect(voiceMocks.ask.mock.calls[1][0]).toBe(
-      "I heard this: Captured Jordan Lee. Is that accurate? Say yes to save it, or no to answer again.",
+      "So I am going to put down: Captured Jordan Lee. Is that right? Say yes to save it, or no to answer again.",
     );
-    expect(voiceMocks.ask.mock.calls[2][0]).toMatch(/mailing address/i);
+    expect(voiceMocks.ask.mock.calls[2][0]).toMatch(/other names/i);
     expect(screen.getByTestId("legal-name")).toHaveTextContent("Jordan Lee");
   });
 
@@ -177,7 +177,7 @@ describe("InterviewFlow", () => {
     );
     expect(screen.getByTestId("condition-count")).toHaveTextContent("1");
     expect(
-      screen.getByRole("heading", { name: /full mailing address/i }),
+      screen.getByRole("heading", { name: /other names/i }),
     ).toBeVisible();
   });
 
@@ -185,7 +185,11 @@ describe("InterviewFlow", () => {
     const user = userEvent.setup();
     const request = vi
       .fn()
+      .mockResolvedValueOnce(extractionResponse("Name captured.", "unknown"))
+      .mockResolvedValueOnce(extractionResponse("Other names captured.", "unknown"))
       .mockResolvedValueOnce(extractionResponse("Identity captured.", "unknown"))
+      .mockResolvedValueOnce(extractionResponse("Language captured.", "unknown"))
+      .mockResolvedValueOnce(extractionResponse("Address captured.", "unknown"))
       .mockResolvedValueOnce(extractionResponse("Contact captured.", "unknown"))
       .mockResolvedValueOnce(extractionResponse("Conditions captured.", "unknown"))
       .mockResolvedValueOnce(
@@ -213,6 +217,10 @@ describe("InterviewFlow", () => {
       }),
     );
     await answerAndConfirm(user, "identity answer");
+    await answerAndConfirm(user, "no other names");
+    await answerAndConfirm(user, "identity details");
+    await answerAndConfirm(user, "citizen and English");
+    await answerAndConfirm(user, "address answer");
     await answerAndConfirm(user, "contact answer");
     await answerAndConfirm(user, "condition answer");
     await answerAndConfirm(user, "Dr. Lee treated me.");
@@ -230,7 +238,67 @@ describe("InterviewFlow", () => {
       screen.getByRole("heading", { name: /every medicine you take/i }),
     ).toBeVisible();
     expect(screen.getByTestId("providers-complete")).toHaveTextContent("yes");
-    expect(request).toHaveBeenCalledTimes(5);
+    expect(request).toHaveBeenCalledTimes(9);
+  });
+
+  it("retries a failed extraction without asking the applicant to repeat", async () => {
+    const user = userEvent.setup();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: "Extraction is temporarily unavailable." }),
+      })
+      .mockResolvedValueOnce(
+        extractionResponse("Captured Jordan Lee.", "unknown", [
+          {
+            kind: "scalar",
+            entityKey: "",
+            field: "applicant.legalName",
+            value: "Jordan Lee",
+            confidence: 0.99,
+            evidenceText: "Jordan Lee",
+          },
+        ]),
+      );
+    vi.stubGlobal("fetch", request);
+    render(
+      <CaseProvider>
+        <InterviewFlow />
+        <CaseProbe />
+      </CaseProvider>,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Use one-question keyboard fallback",
+      }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Answer the current question" }),
+      "My legal name is Jordan Lee.",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Review what I said" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Retry this answer" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Retry this answer" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "I heard: Captured Jordan Lee.",
+      }),
+    ).toBeVisible();
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "/api/interview/extract",
+      expect.objectContaining({
+        body: expect.stringContaining("My legal name is Jordan Lee."),
+      }),
+    );
   });
 });
 
