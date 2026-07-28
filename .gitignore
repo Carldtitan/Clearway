@@ -12,3 +12,5 @@ node_modules/
 out/
 output/
 .playwright-cli/
+test-results/
+playwright-report/
