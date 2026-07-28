@@ -40,9 +40,10 @@ describe("SSA form adapters", () => {
     ).toBe("2025-10-18");
   });
 
-  it("leaves SSA-827 signature, date, and witness fields blank and editable", () => {
+  it("leaves SSA-827 SSA-only, signature, date, and witness fields blank", () => {
     const data = adaptSsa827(syntheticApplicant).payload.data;
     [
+      "additionalInformationToIdentifySubjectOtherNamesSpecificSourceMaterialToBeDisclosed",
       "individualAuthorizingDisclosureSignature",
       "parentGuardianPersonalRepresentativeSignIfTwoSignaturesRequiredByStateLaw",
       "dateSigned",
@@ -51,7 +52,7 @@ describe("SSA form adapters", () => {
       "witnessPhoneNumberOrAddress",
       "secondWitnessPhoneNumberOrAddress",
     ].forEach((field) => {
-      expect(data[field]).toMatchObject({ value: "", readOnly: false });
+      expect(data).not.toHaveProperty(field);
     });
   });
 
@@ -101,4 +102,3 @@ describe("deterministic document companions", () => {
     expect(continuation?.data.html).toContain("Medicine 13");
   });
 });
-

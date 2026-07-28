@@ -6,9 +6,9 @@ import {
 } from "@/lib/forms/adapters/shared";
 import type { AnvilFieldValue } from "@/lib/forms/types";
 import {
+  digitsOnly,
   splitFullName,
   toAnvilAddress,
-  yesNo,
 } from "@/lib/forms/value";
 import { generateRemarks } from "@/lib/documents/remarks";
 import { partitionForForm } from "@/lib/rules/consistency";
@@ -19,7 +19,7 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
     applicantNameFirstMiddleInitialLastSuffix: splitFullName(
       applicant.legalName.value,
     ),
-    socialSecurityNumber: applicant.ssn.value,
+    socialSecurityNumber: digitsOnly(applicant.ssn.value),
     applicantMailingAddress: toAnvilAddress(applicant.address.value),
     emailAddress: applicant.email.value,
     primaryDaytimePhoneNumber: applicant.phone.value,
@@ -27,19 +27,45 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
       applicant.preferredLanguage.value === "English"
         ? null
         : applicant.preferredLanguage.value,
-    currentlyWorkingStatus: yesNo(applicantCase.currentlyEarning.value),
+    canSpeakAndUnderstandEnglish:
+      applicant.preferredLanguage.value === "English"
+        ? "Can Speak and Understand English - Yes"
+        : "Can Speak and Understand English - No",
+    canReadEnglish: "Can Read English - Yes",
+    canWriteMoreThanNameInEnglish:
+      "Can Write More Than Name in English - Yes",
+    currentlyWorkingStatus:
+      applicantCase.currentlyEarning.value === null
+        ? null
+        : applicantCase.currentlyEarning.value
+          ? "Currently Working - Yes Currently Working"
+          : "Currently Working - Stopped Working",
     dateStoppedWorking: applicantCase.jobs[0]?.endDate.value ?? null,
     stoppedWorkingReason: applicantCase.jobs[0]?.reasonEnded.value
-      ? "Because of my condition"
+      ? "Stopped Working - Because of Condition(s)"
       : null,
     conditionsBecameSevereDateStoppedForOtherReasons:
       applicantCase.eligibilityInput.allegedOnsetDate,
-    hadJobIn5YearsBeforeDisability6A: yesNo(applicantCase.jobs.length > 0),
-    currentlyTakingMedicines: yesNo(applicantCase.medications.length > 0),
-    "8AHaveYouSeenOrReceivedTreatment": yesNo(
-      applicantCase.providers.length > 0,
-    ),
+    hadJobIn5YearsBeforeDisability6A:
+      applicantCase.jobs.length > 0
+        ? "YES - Had Job in 5 Years Before Disability (Complete table below)"
+        : "NO - Had Job in 5 Years Before Disability (Go to Section 7)",
+    moreThanOneJobVsOnlyOneJob:
+      applicantCase.jobs.length > 1
+        ? "I had more than one job"
+        : "I had only one job",
+    currentlyTakingMedicines:
+      applicantCase.medications.length > 0
+        ? "Currently taking medicines - Yes"
+        : "Currently taking medicines - No",
+    "8AHaveYouSeenOrReceivedTreatment":
+      applicantCase.providers.length > 0
+        ? "Yes (Complete the chart below)"
+        : "No (Go to Section 9)",
     section11Remarks: generateRemarks(applicantCase) || "None",
+    dateReportCompleted: new Date().toISOString().slice(0, 10),
+    whoIsCompletingThisReport:
+      "Who is completing this report - The person listed in 1.A.",
     daytimePhoneNumber: applicant.phone.value,
   };
 
@@ -71,7 +97,8 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
       primaryJob.supervision.value;
     data["6B4MachinesToolsAndEquipmentUsedRegularly"] =
       primaryJob.toolsAndMachines.value?.join(", ") ?? null;
-    data["6B5DidThisJobRequireInteractionWithOthers"] = "Yes";
+    data["6B5DidThisJobRequireInteractionWithOthers"] =
+      "6.B.5. Did this job require interaction with others - YES";
     data["6B5DescriptionOfInteractionsWithCoworkersPublic"] =
       "Worked with staff and customers.";
     const demands = primaryJob.physicalDemands.value;

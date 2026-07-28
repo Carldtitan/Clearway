@@ -2,7 +2,7 @@ export type FormKind = "ssa16" | "ssa3368" | "ssa3369" | "ssa827";
 
 export interface AnvilFullName {
   firstName: string;
-  middleName?: string;
+  mi?: string;
   lastName: string;
 }
 
@@ -40,4 +40,3 @@ export interface FormAdapterResult {
   configuredAliasCount: number;
   payload: FormPayload;
 }
-
