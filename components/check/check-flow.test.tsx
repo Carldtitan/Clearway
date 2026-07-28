@@ -1,9 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CaseProvider } from "@/components/app/case-context";
 import { CheckFlow } from "@/components/check/check-flow";
+
+vi.mock("@/components/visual/orb", () => ({
+  default: () => <div data-testid="voice-orb" />,
+}));
 
 describe("CheckFlow", () => {
   it("loads the synthetic case and continues without persisting it", async () => {
@@ -14,7 +18,7 @@ describe("CheckFlow", () => {
       </CaseProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Load Elena’s demo" }));
+    await user.click(screen.getByRole("button", { name: "Load Elena's demo" }));
 
     expect(
       await screen.findByRole("heading", {
@@ -27,7 +31,7 @@ describe("CheckFlow", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not advance until each earnings question is answered", async () => {
+  it("reads back each answer before advancing", async () => {
     const user = userEvent.setup();
     render(
       <CaseProvider>
@@ -36,18 +40,75 @@ describe("CheckFlow", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Check where I stand" }),
+      screen.getByRole("button", {
+        name: "Use one-question keyboard fallback",
+      }),
     );
     await user.type(
-      await screen.findByRole("spinbutton", {
-        name: "Average monthly work earnings",
+      await screen.findByRole("textbox", {
+        name: "Answer the current question",
       }),
-      "900",
+      "fourteen eighty",
     );
-    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(
+      screen.getByRole("button", { name: "Confirm this answer" }),
+    );
 
     expect(
-      screen.getByText("Answer each question on this step to continue."),
+      screen.getByRole("heading", {
+        name: /average work earnings of \$1,480 a month/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("fourteen eighty")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Yes, that is right" }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: /definition of statutory blindness/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the requested spoken confirmation language for blindness", async () => {
+    const user = userEvent.setup();
+    render(
+      <CaseProvider>
+        <CheckFlow />
+      </CaseProvider>,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Use one-question keyboard fallback",
+      }),
+    );
+    await user.type(
+      await screen.findByRole("textbox", {
+        name: "Answer the current question",
+      }),
+      "zero",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirm this answer" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Yes, that is right" }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Answer the current question" }),
+      "yes",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirm this answer" }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "So I am going to put statutory blindness down as yes. Is that right?",
+      }),
     ).toBeInTheDocument();
   });
 });
