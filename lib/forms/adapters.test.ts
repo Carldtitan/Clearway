@@ -54,6 +54,19 @@ describe("SSA form adapters", () => {
     ).toBe("2025-10-18");
   });
 
+  it("maps the canonical education history into SSA-3368", () => {
+    const [, ssa3368] = buildFormPayloads(syntheticApplicant);
+    expect(ssa3368.payload.data["5AGrade12"]).toBe(true);
+    expect(ssa3368.payload.data["5ADateCompletedMmYyyy"]).toBe("1996-06");
+    expect(ssa3368.payload.data["5BSpecialEducation"]).toBe(
+      "Special Education - No",
+    );
+    expect(ssa3368.payload.data.nameOfTrainingFacility).toBe(
+      "Capitol Fresh Market",
+    );
+    expect(ssa3368.payload.data.writtenLanguageUsedEveryDay5D).toBe("English");
+  });
+
   it("leaves SSA-827 SSA-only, signature, date, and witness fields blank", () => {
     const data = adaptSsa827(syntheticApplicant).payload.data;
     [

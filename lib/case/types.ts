@@ -137,6 +137,20 @@ export interface Child {
   ssn: CanonicalValue<string>;
 }
 
+export interface EducationHistory {
+  highestLevel: CanonicalValue<string>;
+  completionDate: CanonicalValue<string>;
+  schoolName: CanonicalValue<string>;
+  schoolAddress: CanonicalValue<PostalAddress>;
+  specialEducation: CanonicalValue<boolean>;
+  specialEducationDetails: CanonicalValue<string>;
+  training: CanonicalValue<string[]>;
+  trainingFacility: CanonicalValue<string>;
+  trainingFacilityPhone: CanonicalValue<string>;
+  trainingFacilityAddress: CanonicalValue<PostalAddress>;
+  writtenLanguage: CanonicalValue<string>;
+}
+
 export interface InterviewTurn {
   id: string;
   prompt: string;
@@ -192,6 +206,7 @@ export interface ApplicantCase {
   jobs: Job[];
   marriages: Marriage[];
   children: Child[];
+  education: EducationHistory;
   servedInMilitary: CanonicalValue<boolean>;
   nonCitizen: CanonicalValue<boolean>;
   workedLastYear: CanonicalValue<boolean>;

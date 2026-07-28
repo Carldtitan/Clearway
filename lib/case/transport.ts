@@ -46,6 +46,7 @@ export const applicantCaseTransportSchema = z
     jobs: z.array(z.unknown()).max(50),
     marriages: z.array(z.unknown()).max(20),
     children: z.array(z.unknown()).max(50),
+    education: z.record(z.string(), z.unknown()),
     recordRequests: z.array(z.unknown()).max(50),
     providerCollectionComplete: z.boolean(),
     revision: z.number().int().nonnegative(),

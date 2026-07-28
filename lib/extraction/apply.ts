@@ -4,8 +4,10 @@ import type {
   CanonicalValue,
   CaptureSource,
   CaseAction,
+  Child,
   Condition,
   Job,
+  Marriage,
   Medication,
   PhysicalDemands,
   PostalAddress,
@@ -35,7 +37,13 @@ export function applyInterviewExtraction(
     options.createId ?? ((prefix) => `${prefix}-${crypto.randomUUID()}`);
   const source = options.source ?? "voice";
   extraction.facts
-    .filter((fact) => compatibleFact(fact) && fact.kind === "scalar")
+    .filter(
+      (fact) =>
+        compatibleFact(fact) &&
+        fact.kind === "scalar" &&
+        !isAddressComponent(fact.field) &&
+        !isRepeatedScalar(fact.field),
+    )
     .forEach((fact) => {
       dispatch({
         type: "APPLY_CANDIDATE_PATCH",
@@ -49,6 +57,8 @@ export function applyInterviewExtraction(
         },
       });
     });
+  applyAddressScalars(dispatch, extraction.facts, turnId, source);
+  applyRepeatedScalars(dispatch, extraction.facts, turnId, source);
 
   const grouped = groupEntities(
     extraction.facts.filter(
@@ -86,6 +96,20 @@ export function applyInterviewExtraction(
           entity: jobFrom(facts, turnId, source, createId),
         });
         break;
+      case "marriage":
+        dispatch({
+          type: "ADD_ENTITY",
+          collection: "marriages",
+          entity: marriageFrom(facts, turnId, source, createId),
+        });
+        break;
+      case "child":
+        dispatch({
+          type: "ADD_ENTITY",
+          collection: "children",
+          entity: childFrom(facts, turnId, source, createId),
+        });
+        break;
     }
   });
 
@@ -98,12 +122,37 @@ export function applyInterviewExtraction(
 const scalarFields = new Set<ExtractedFact["field"]>([
   "applicant.legalName",
   "applicant.otherNames",
+  "applicant.ssn",
   "applicant.dateOfBirth",
   "applicant.placeOfBirth",
   "applicant.citizenship",
   "applicant.preferredLanguage",
   "applicant.phone",
   "applicant.email",
+  "applicant.addressLine1",
+  "applicant.addressLine2",
+  "applicant.city",
+  "applicant.state",
+  "applicant.zip",
+  "education.highestLevel",
+  "education.completionDate",
+  "education.schoolName",
+  "education.schoolAddressLine1",
+  "education.schoolAddressLine2",
+  "education.schoolCity",
+  "education.schoolState",
+  "education.schoolZip",
+  "education.specialEducation",
+  "education.specialEducationDetails",
+  "education.training",
+  "education.trainingFacility",
+  "education.trainingFacilityPhone",
+  "education.trainingAddressLine1",
+  "education.trainingAddressLine2",
+  "education.trainingCity",
+  "education.trainingState",
+  "education.trainingZip",
+  "education.writtenLanguage",
   "servedInMilitary",
   "nonCitizen",
   "workedLastYear",
@@ -278,21 +327,117 @@ function jobFrom(
     ),
     pay: candidate(numberValue(facts, "job.pay"), confidence, turnId, source),
     duties: candidate(many(facts, "job.duty"), confidence, turnId, source),
-    physicalDemands: candidate<PhysicalDemands>(
-      null,
+    physicalDemands: candidate(
+      physicalDemandsFrom(facts),
       confidence,
       turnId,
       source,
     ),
-    toolsAndMachines: candidate([], confidence, turnId, source),
-    supervision: candidate<string>(null, confidence, turnId, source),
-    writingAndReports: candidate<string>(null, confidence, turnId, source),
+    toolsAndMachines: candidate(
+      many(facts, "job.toolOrMachine"),
+      confidence,
+      turnId,
+      source,
+    ),
+    supervision: candidate(
+      one(facts, "job.supervision"),
+      confidence,
+      turnId,
+      source,
+    ),
+    writingAndReports: candidate(
+      one(facts, "job.writingAndReports"),
+      confidence,
+      turnId,
+      source,
+    ),
     reasonEnded: candidate(
       one(facts, "job.reasonEnded"),
       confidence,
       turnId,
       source,
     ),
+  };
+}
+
+function marriageFrom(
+  facts: ExtractedFact[],
+  turnId: string,
+  source: CaptureSource,
+  createId: IdFactory,
+): Marriage {
+  const confidence = lowestConfidence(facts);
+  return {
+    id: createId("marriage"),
+    spouseName: candidate(
+      one(facts, "marriage.spouseName"),
+      confidence,
+      turnId,
+      source,
+    ),
+    startDate: candidate(
+      one(facts, "marriage.startDate"),
+      confidence,
+      turnId,
+      source,
+    ),
+    endDate: candidate(
+      one(facts, "marriage.endDate"),
+      confidence,
+      turnId,
+      source,
+    ),
+    endReason: candidate(
+      one(facts, "marriage.endReason"),
+      confidence,
+      turnId,
+      source,
+    ),
+  };
+}
+
+function childFrom(
+  facts: ExtractedFact[],
+  turnId: string,
+  source: CaptureSource,
+  createId: IdFactory,
+): Child {
+  const confidence = lowestConfidence(facts);
+  return {
+    id: createId("child"),
+    name: candidate(one(facts, "child.name"), confidence, turnId, source),
+    dateOfBirth: candidate(
+      one(facts, "child.dateOfBirth"),
+      confidence,
+      turnId,
+      source,
+    ),
+    ssn: candidate(one(facts, "child.ssn"), confidence, turnId, source),
+  };
+}
+
+function physicalDemandsFrom(
+  facts: ExtractedFact[],
+): PhysicalDemands | null {
+  const fields = [
+    "job.lifting",
+    "job.standingHours",
+    "job.walkingHours",
+    "job.sittingHours",
+    "job.climbing",
+    "job.stooping",
+    "job.handling",
+  ] satisfies ExtractedFact["field"][];
+  const physicalFieldSet = new Set<ExtractedFact["field"]>(fields);
+  if (!facts.some((fact) => physicalFieldSet.has(fact.field))) return null;
+  return {
+    lifting: one(facts, "job.lifting") ?? "",
+    standingHours: numberValue(facts, "job.standingHours"),
+    walkingHours: numberValue(facts, "job.walkingHours"),
+    sittingHours: numberValue(facts, "job.sittingHours"),
+    climbing: one(facts, "job.climbing") ?? "",
+    stooping: one(facts, "job.stooping") ?? "",
+    handling: one(facts, "job.handling") ?? "",
   };
 }
 
@@ -312,7 +457,10 @@ function providerAddress(facts: ExtractedFact[]): PostalAddress | null {
 }
 
 function scalarValue(fact: ExtractedFact): string | string[] | boolean {
-  if (fact.field === "applicant.otherNames") {
+  if (
+    fact.field === "applicant.otherNames" ||
+    fact.field === "education.training"
+  ) {
     return fact.value
       .split(",")
       .map((value) => value.trim())
@@ -325,11 +473,147 @@ function scalarValue(fact: ExtractedFact): string | string[] | boolean {
       "workedLastYear",
       "currentlyEarning",
       "bankDetailsReady",
+      "education.specialEducation",
     ].includes(fact.field)
   ) {
     return ["yes", "true"].includes(fact.value.trim().toLocaleLowerCase());
   }
   return fact.value;
+}
+
+const applicantAddressFields = [
+  "applicant.addressLine1",
+  "applicant.addressLine2",
+  "applicant.city",
+  "applicant.state",
+  "applicant.zip",
+] satisfies ExtractedFact["field"][];
+
+const schoolAddressFields = [
+  "education.schoolAddressLine1",
+  "education.schoolAddressLine2",
+  "education.schoolCity",
+  "education.schoolState",
+  "education.schoolZip",
+] satisfies ExtractedFact["field"][];
+
+const trainingAddressFields = [
+  "education.trainingAddressLine1",
+  "education.trainingAddressLine2",
+  "education.trainingCity",
+  "education.trainingState",
+  "education.trainingZip",
+] satisfies ExtractedFact["field"][];
+
+function isAddressComponent(field: ExtractedFact["field"]) {
+  return new Set<ExtractedFact["field"]>([
+    ...applicantAddressFields,
+    ...schoolAddressFields,
+    ...trainingAddressFields,
+  ]).has(
+    field,
+  );
+}
+
+function isRepeatedScalar(field: ExtractedFact["field"]) {
+  return field === "education.training";
+}
+
+function applyAddressScalars(
+  dispatch: Dispatch<CaseAction>,
+  facts: ExtractedFact[],
+  turnId: string,
+  source: CaptureSource,
+) {
+  const definitions: Array<{
+    path: string;
+    line1: ExtractedFact["field"];
+    line2: ExtractedFact["field"];
+    city: ExtractedFact["field"];
+    state: ExtractedFact["field"];
+    zip: ExtractedFact["field"];
+  }> = [
+    {
+      path: "applicant.address",
+      line1: "applicant.addressLine1",
+      line2: "applicant.addressLine2",
+      city: "applicant.city",
+      state: "applicant.state",
+      zip: "applicant.zip",
+    },
+    {
+      path: "education.schoolAddress",
+      line1: "education.schoolAddressLine1",
+      line2: "education.schoolAddressLine2",
+      city: "education.schoolCity",
+      state: "education.schoolState",
+      zip: "education.schoolZip",
+    },
+    {
+      path: "education.trainingFacilityAddress",
+      line1: "education.trainingAddressLine1",
+      line2: "education.trainingAddressLine2",
+      city: "education.trainingCity",
+      state: "education.trainingState",
+      zip: "education.trainingZip",
+    },
+  ];
+  definitions.forEach((definition) => {
+    const addressFacts = facts.filter((fact) =>
+      [
+        definition.line1,
+        definition.line2,
+        definition.city,
+        definition.state,
+        definition.zip,
+      ].includes(fact.field),
+    );
+    const line1 = one(addressFacts, definition.line1);
+    const city = one(addressFacts, definition.city);
+    const state = one(addressFacts, definition.state);
+    const zip = one(addressFacts, definition.zip);
+    if (!line1 || !city || !state || !zip) return;
+    dispatch({
+      type: "APPLY_CANDIDATE_PATCH",
+      patch: {
+        path: definition.path,
+        value: {
+          line1,
+          line2: one(addressFacts, definition.line2) ?? undefined,
+          city,
+          state,
+          zip,
+        } satisfies PostalAddress,
+        confidence: lowestConfidence(addressFacts),
+        evidenceText: addressFacts.map((fact) => fact.evidenceText).join(" "),
+        turnId,
+        source,
+      },
+    });
+  });
+}
+
+function applyRepeatedScalars(
+  dispatch: Dispatch<CaseAction>,
+  facts: ExtractedFact[],
+  turnId: string,
+  source: CaptureSource,
+) {
+  const trainingFacts = facts.filter(
+    (fact) => fact.kind === "scalar" && fact.field === "education.training",
+  );
+  if (!trainingFacts.length) return;
+  dispatch({
+    type: "APPLY_CANDIDATE_PATCH",
+    patch: {
+      path: "education.training",
+      value: trainingFacts.map((fact) => fact.value),
+      confidence: lowestConfidence(trainingFacts),
+      evidenceText: trainingFacts.map((fact) => fact.evidenceText).join(" "),
+      turnId,
+      source,
+    },
+  });
 }
 
 function one(facts: ExtractedFact[], field: ExtractedFact["field"]) {

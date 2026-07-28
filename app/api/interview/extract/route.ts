@@ -19,6 +19,11 @@ Rules:
 - The alleged onset date is when a condition began limiting work, not necessarily diagnosis date.
 - A provider is a practitioner or facility that treated any reported condition.
 - providerListStatus is complete only when the speaker explicitly says there are no other providers or places of care.
+- For applicant, school, and training addresses, emit separate address component facts. Never combine an address into one field.
+- For each marriage, child, condition, provider, medication, and job, use one stable entityKey for every fact about that item.
+- For jobs, capture the described physical demands, tools, supervision, reports, and reason work ended. Do not turn an unsupported generalization into a number.
+- Treat Social Security numbers as strings and preserve leading zeroes and spoken uncertainty.
+- For yes/no scalar fields, value must be "yes" or "no" only when the speaker clearly answered.
 - Use one fact per atomic value. Repeated symptoms, duties, or side effects become separate facts with the same entityKey and field.
 - entityKey links facts about the same repeated item; use a short stable lowercase name. It is empty only for scalar facts.
 - Dates use YYYY-MM-DD only when the speaker gives enough information. Otherwise preserve the spoken date phrase as the value.
@@ -60,7 +65,12 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "user",
-          content: `Extract SSDI application facts from this interview turn:\n\n${input.data.transcript}`,
+          content: `Interview topic: ${input.data.topic ?? "general"}
+Question asked: ${input.data.prompt ?? "not provided"}
+
+Extract SSDI application facts from this answer:
+
+${input.data.transcript}`,
         },
       ],
       output_config: {

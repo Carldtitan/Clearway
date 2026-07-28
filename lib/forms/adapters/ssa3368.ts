@@ -34,6 +34,32 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
     canReadEnglish: "Can Read English - Yes",
     canWriteMoreThanNameInEnglish:
       "Can Write More Than Name in English - Yes",
+    "5ADateCompletedMmYyyy": applicantCase.education.completionDate.value,
+    "5ASchoolAddress": toAnvilAddress(
+      applicantCase.education.schoolAddress.value,
+    ),
+    "5BSpecialEducation":
+      applicantCase.education.specialEducation.value === null
+        ? null
+        : applicantCase.education.specialEducation.value
+          ? "Special Education - Yes"
+          : "Special Education - No",
+    "5BReasonSForSpecialEducation":
+      applicantCase.education.specialEducationDetails.value,
+    trainingReceived5C:
+      applicantCase.education.training.value === null
+        ? null
+        : applicantCase.education.training.value.length > 0
+          ? "Training Received - Yes"
+          : "Training Received - No",
+    nameOfTrainingFacility: applicantCase.education.trainingFacility.value,
+    trainingFacilityPhoneNumber:
+      applicantCase.education.trainingFacilityPhone.value,
+    trainingFacilityAddress: toAnvilAddress(
+      applicantCase.education.trainingFacilityAddress.value,
+    ),
+    writtenLanguageUsedEveryDay5D:
+      applicantCase.education.writtenLanguage.value,
     currentlyWorkingStatus:
       applicantCase.currentlyEarning.value === null
         ? null
@@ -68,6 +94,11 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
       "Who is completing this report - The person listed in 1.A.",
     daytimePhoneNumber: applicant.phone.value,
   };
+
+  const educationAlias = highestEducationAlias(
+    applicantCase.education.highestLevel.value,
+  );
+  if (educationAlias) data[educationAlias] = true;
 
   applicantCase.conditions.slice(0, 5).forEach((condition, index) => {
     data[`medicalMentalCondition${index + 1}`] = condition.name.value;
@@ -156,4 +187,19 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
   );
 
   return createAdapterResult("ssa3368", "SSA-3368-BK", data);
+}
+
+function highestEducationAlias(level: string | null): string | null {
+  if (!level) return null;
+  const normalized = level.trim().toLocaleLowerCase();
+  if (normalized.includes("ged")) return "5AGed";
+  const collegeYears = normalized.match(/(?:college|university)\D*(\d+)/)?.[1];
+  if (collegeYears) {
+    const years = Math.min(4, Number(collegeYears));
+    return years >= 4 ? "5ACollege4OrMore" : `5ACollege${years}`;
+  }
+  const grade = normalized.match(/\b(1[0-2]|[0-9])\b/)?.[1];
+  if (grade) return `5AGrade${grade}`;
+  if (normalized.includes("kindergarten")) return "5AGradeK";
+  return null;
 }

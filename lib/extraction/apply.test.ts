@@ -115,4 +115,94 @@ describe("interview extraction boundary", () => {
     expect(applicantCase.conditions[0].name.provenance.source).toBe("typed");
     expect(applicantCase.providers[0].name.provenance.source).toBe("typed");
   });
+
+  it("maps spoken identity, education, family, and detailed work facts", () => {
+    let applicantCase = createEmptyApplicantCase();
+    const dispatch = (action: CaseAction) => {
+      applicantCase = caseReducer(applicantCase, action);
+    };
+    const facts: InterviewExtraction["facts"] = [
+      scalar("applicant.ssn", "000-22-3333"),
+      scalar("applicant.addressLine1", "10 Oak Street"),
+      scalar("applicant.city", "Sacramento"),
+      scalar("applicant.state", "CA"),
+      scalar("applicant.zip", "95814"),
+      scalar("education.highestLevel", "12"),
+      scalar("education.specialEducation", "no"),
+      scalar("education.training", "nurse aide certificate"),
+      entity("marriage", "alex", "marriage.spouseName", "Alex Lee"),
+      entity("child", "sam", "child.name", "Sam Lee"),
+      entity("job", "care", "job.title", "Home health aide"),
+      entity("job", "care", "job.standingHours", "6"),
+      entity("job", "care", "job.lifting", "frequently lifted 25 pounds"),
+      entity("job", "care", "job.toolOrMachine", "transfer belt"),
+    ];
+
+    applyInterviewExtraction(
+      dispatch,
+      {
+        summary: "Application details",
+        followUpQuestion: "",
+        providerListStatus: "unknown",
+        facts,
+      },
+      "turn-complete",
+      { createId: (prefix) => `${prefix}-complete` },
+    );
+
+    expect(applicantCase.applicant.ssn.value).toBe("000-22-3333");
+    expect(applicantCase.applicant.address.value).toEqual({
+      line1: "10 Oak Street",
+      city: "Sacramento",
+      state: "CA",
+      zip: "95814",
+    });
+    expect(applicantCase.education.highestLevel.value).toBe("12");
+    expect(applicantCase.education.specialEducation.value).toBe(false);
+    expect(applicantCase.education.training.value).toEqual([
+      "nurse aide certificate",
+    ]);
+    expect(applicantCase.marriages[0].spouseName.value).toBe("Alex Lee");
+    expect(applicantCase.children[0].name.value).toBe("Sam Lee");
+    expect(applicantCase.jobs[0].physicalDemands.value).toMatchObject({
+      standingHours: 6,
+      lifting: "frequently lifted 25 pounds",
+    });
+    expect(applicantCase.jobs[0].toolsAndMachines.value).toEqual([
+      "transfer belt",
+    ]);
+  });
 });
+
+function scalar(
+  field: Extract<
+    InterviewExtraction["facts"][number]["field"],
+    `applicant.${string}` | `education.${string}`
+  >,
+  value: string,
+): InterviewExtraction["facts"][number] {
+  return {
+    kind: "scalar",
+    entityKey: "",
+    field,
+    value,
+    confidence: 0.98,
+    evidenceText: value,
+  };
+}
+
+function entity(
+  kind: Exclude<InterviewExtraction["facts"][number]["kind"], "scalar">,
+  entityKey: string,
+  field: InterviewExtraction["facts"][number]["field"],
+  value: string,
+): InterviewExtraction["facts"][number] {
+  return {
+    kind,
+    entityKey,
+    field,
+    value,
+    confidence: 0.96,
+    evidenceText: value,
+  };
+}
