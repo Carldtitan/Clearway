@@ -116,6 +116,13 @@ function addEntity(
       return { ...state, marriages: [...state.marriages, action.entity] };
     case "children":
       return { ...state, children: [...state.children, action.entity] };
+    case "claimContacts":
+      return {
+        ...state,
+        claimContacts: [...state.claimContacts, action.entity],
+      };
+    case "medicalTests":
+      return { ...state, medicalTests: [...state.medicalTests, action.entity] };
   }
 }
 

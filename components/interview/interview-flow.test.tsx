@@ -191,6 +191,7 @@ describe("InterviewFlow", () => {
       .mockResolvedValueOnce(extractionResponse("Language captured.", "unknown"))
       .mockResolvedValueOnce(extractionResponse("Address captured.", "unknown"))
       .mockResolvedValueOnce(extractionResponse("Contact captured.", "unknown"))
+      .mockResolvedValueOnce(extractionResponse("Backup contact captured.", "unknown"))
       .mockResolvedValueOnce(extractionResponse("Conditions captured.", "unknown"))
       .mockResolvedValueOnce(
         extractionResponse(
@@ -222,6 +223,7 @@ describe("InterviewFlow", () => {
     await answerAndConfirm(user, "citizen and English");
     await answerAndConfirm(user, "address answer");
     await answerAndConfirm(user, "contact answer");
+    await answerAndConfirm(user, "no backup contact");
     await answerAndConfirm(user, "condition answer");
     await answerAndConfirm(user, "Dr. Lee treated me.");
 
@@ -235,10 +237,10 @@ describe("InterviewFlow", () => {
     await answerAndConfirm(user, "No one else.");
 
     expect(
-      screen.getByRole("heading", { name: /every medicine you take/i }),
+      screen.getByRole("heading", { name: /medical tests/i }),
     ).toBeVisible();
     expect(screen.getByTestId("providers-complete")).toHaveTextContent("yes");
-    expect(request).toHaveBeenCalledTimes(9);
+    expect(request).toHaveBeenCalledTimes(10);
   });
 
   it("retries a failed extraction without asking the applicant to repeat", async () => {

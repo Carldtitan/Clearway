@@ -137,6 +137,24 @@ export interface Child {
   ssn: CanonicalValue<string>;
 }
 
+export interface ClaimContact {
+  id: string;
+  name: CanonicalValue<string>;
+  relationship: CanonicalValue<string>;
+  address: CanonicalValue<PostalAddress>;
+  phone: CanonicalValue<string>;
+  speaksEnglish: CanonicalValue<boolean>;
+  preferredLanguage: CanonicalValue<string>;
+}
+
+export interface MedicalTest {
+  id: string;
+  type: CanonicalValue<string>;
+  bodyPart: CanonicalValue<string>;
+  providerOrFacility: CanonicalValue<string>;
+  date: CanonicalValue<string>;
+}
+
 export interface EducationHistory {
   highestLevel: CanonicalValue<string>;
   completionDate: CanonicalValue<string>;
@@ -206,12 +224,20 @@ export interface ApplicantCase {
   jobs: Job[];
   marriages: Marriage[];
   children: Child[];
+  claimContacts: ClaimContact[];
+  medicalTests: MedicalTest[];
   education: EducationHistory;
   servedInMilitary: CanonicalValue<boolean>;
   nonCitizen: CanonicalValue<boolean>;
   workedLastYear: CanonicalValue<boolean>;
   currentlyEarning: CanonicalValue<boolean>;
   bankDetailsReady: CanonicalValue<boolean>;
+  otherPublicDisabilityBenefitsFiled: CanonicalValue<boolean>;
+  otherPublicDisabilityBenefitTypes: CanonicalValue<string[]>;
+  bankRoutingNumber: CanonicalValue<string>;
+  bankAccountNumber: CanonicalValue<string>;
+  bankAccountType: CanonicalValue<string>;
+  directDepositRefused: CanonicalValue<boolean>;
   interviewTurns: InterviewTurn[];
   providerCollectionComplete: boolean;
   recordRequests: RecordRequest[];
@@ -226,7 +252,9 @@ export type CanonicalCollection =
   | "medications"
   | "jobs"
   | "marriages"
-  | "children";
+  | "children"
+  | "claimContacts"
+  | "medicalTests";
 
 export interface CandidatePatch {
   path: string;

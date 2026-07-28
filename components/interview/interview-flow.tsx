@@ -97,6 +97,12 @@ const topics: InterviewTopic[] = [
       "What phone number and email address should Social Security use to reach you?",
   },
   {
+    id: "claim_contact",
+    label: "Backup contact",
+    prompt:
+      "Is there a family member, friend, or neighbor who knows about your conditions and can help Social Security reach you? If yes, tell me their name, relationship to you, phone number, address, and preferred language.",
+  },
+  {
     id: "conditions",
     label: "Health",
     prompt:
@@ -107,6 +113,12 @@ const topics: InterviewTopic[] = [
     label: "Care",
     prompt:
       "Tell me about one doctor, clinic, hospital, therapist, or other place that treated you. Include the name, location, phone number, what they treated, and first and most recent visit if you know them. If your list is finished, say there are no more providers.",
+  },
+  {
+    id: "medical_tests",
+    label: "Medical tests",
+    prompt:
+      "Have you had or been scheduled for medical tests such as an MRI, CT scan, X-ray, blood test, breathing test, heart test, hearing test, vision test, or psychological test? For each one, tell me the test, body part if relevant, facility, and date.",
   },
   {
     id: "medications",
@@ -157,10 +169,16 @@ const topics: InterviewTopic[] = [
       "Did you work at any time during the last year, and are you earning any money from work now?",
   },
   {
+    id: "other_benefits",
+    label: "Other benefits",
+    prompt:
+      "Have you filed, or do you intend to file, for another public disability benefit such as Veterans benefits, Supplemental Security Income, welfare, workers' compensation, or another public disability program? If yes, name each one.",
+  },
+  {
     id: "bank",
     label: "Direct deposit",
     prompt:
-      "Do you have your bank routing and account information available for direct deposit? Do not say the numbers now; I only need to know whether you have them ready.",
+      "Would you like to add direct-deposit details to this packet now? If yes, say whether it is checking or savings, then say the routing number and account number. You can say not now and add them during review instead.",
   },
 ];
 
@@ -189,6 +207,17 @@ const factLabels: Partial<
   "job.reasonEnded": "Why work ended",
   "marriage.spouseName": "Spouse",
   "child.name": "Child",
+  "claimContact.name": "Backup contact",
+  "claimContact.relationship": "Relationship",
+  "claimContact.phone": "Contact phone",
+  "medicalTest.type": "Medical test",
+  "medicalTest.bodyPart": "Body part",
+  "medicalTest.providerOrFacility": "Testing facility",
+  "medicalTest.date": "Test date",
+  otherPublicDisabilityBenefitTypes: "Other benefit",
+  bankAccountType: "Account type",
+  bankRoutingNumber: "Routing number",
+  bankAccountNumber: "Account number",
 };
 
 export function InterviewFlow() {

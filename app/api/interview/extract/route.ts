@@ -18,12 +18,16 @@ Rules:
 - Preserve uncertainty. Approximate dates may be captured only when the speaker says they are approximate.
 - The alleged onset date is when a condition began limiting work, not necessarily diagnosis date.
 - A provider is a practitioner or facility that treated any reported condition.
+- A claimContact is a non-medical person who knows about the applicant's conditions and may help Social Security reach the applicant.
+- A medicalTest is a reported or scheduled diagnostic test. Normalize common test names such as MRI/CT scan, X-ray, blood test, vision test, and psychological/IQ test without inventing a test type.
 - providerListStatus is complete only when the speaker explicitly says there are no other providers or places of care.
 - For applicant, school, and training addresses, emit separate address component facts. Never combine an address into one field.
 - For each marriage, child, condition, provider, medication, and job, use one stable entityKey for every fact about that item.
 - For jobs, capture the described physical demands, tools, supervision, reports, and reason work ended. Do not turn an unsupported generalization into a number.
 - Treat Social Security numbers as strings and preserve leading zeroes and spoken uncertainty.
 - For yes/no scalar fields, value must be "yes" or "no" only when the speaker clearly answered.
+- If the applicant provides direct-deposit details, emit bankDetailsReady as yes plus bankAccountType, bankRoutingNumber, and bankAccountNumber exactly as spoken. Preserve leading zeroes. If they decline direct deposit, emit directDepositRefused as yes.
+- For other public disability programs, emit otherPublicDisabilityBenefitsFiled as yes or no and one otherPublicDisabilityBenefitTypes fact per named program.
 - Use one fact per atomic value. Repeated symptoms, duties, or side effects become separate facts with the same entityKey and field.
 - entityKey links facts about the same repeated item; use a short stable lowercase name. It is empty only for scalar facts.
 - Dates use YYYY-MM-DD only when the speaker gives enough information. Otherwise preserve the spoken date phrase as the value.

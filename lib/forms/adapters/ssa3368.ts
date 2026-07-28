@@ -23,6 +23,10 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
     applicantMailingAddress: toAnvilAddress(applicant.address.value),
     emailAddress: applicant.email.value,
     primaryDaytimePhoneNumber: applicant.phone.value,
+    contactAvailable:
+      applicantCase.claimContacts.length > 0
+        ? "Contact Available - Yes"
+        : "Contact Available - No",
     preferredLanguageIfNotEnglish:
       applicant.preferredLanguage.value === "English"
         ? null
@@ -94,6 +98,42 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
       "Who is completing this report - The person listed in 1.A.",
     daytimePhoneNumber: applicant.phone.value,
   };
+
+  applicantCase.claimContacts.slice(0, 2).forEach((contact, index) => {
+    if (index === 0) {
+      data.contactNameFirstMiddleInitialLast = splitFullName(
+        contact.name.value,
+      );
+      data.contactRelationshipToApplicant = contact.relationship.value;
+      data.contactMailingAddress = toAnvilAddress(contact.address.value);
+      data.contactDaytimePhoneNumber = contact.phone.value;
+      data.contactSpeaksUnderstandsEnglish2E =
+        contact.speaksEnglish.value === null
+          ? null
+          : contact.speaksEnglish.value
+            ? "Can Speak/Understand English - YES"
+            : "Can Speak/Understand English - NO";
+      data.ifNoPreferredLanguage =
+        contact.speaksEnglish.value === false
+          ? contact.preferredLanguage.value
+          : null;
+      return;
+    }
+    data.contactNameFirstMiddleInitialLast1 = splitFullName(contact.name.value);
+    data.relationshipToPersonIn1A = contact.relationship.value;
+    data.contactMailingAddress1 = toAnvilAddress(contact.address.value);
+    data.daytimePhoneNumber1 = contact.phone.value;
+    data.contactSpeaksUnderstandsEnglish2J =
+      contact.speaksEnglish.value === null
+        ? null
+        : contact.speaksEnglish.value
+          ? "Contact Can Speak/Understand English - YES"
+          : "Contact Can Speak/Understand English - NO";
+    data.ifNoPreferredLanguageContact =
+      contact.speaksEnglish.value === false
+        ? contact.preferredLanguage.value
+        : null;
+  });
 
   const educationAlias = highestEducationAlias(
     applicantCase.education.highestLevel.value,
@@ -186,7 +226,123 @@ export function adaptSsa3368(applicantCase: ApplicantCase) {
     },
   );
 
+  data["8BMedicalTestsOrdered"] =
+    applicantCase.medicalTests.length > 0
+      ? "8.B. Yes (Select tests from chart below)"
+      : "8.B. No (Go to Section 9)";
+  applicantCase.medicalTests.forEach((test) => {
+    const aliases = medicalTestAliases(test.type.value);
+    data[aliases.provider] = test.providerOrFacility.value;
+    data[aliases.date] = test.date.value;
+    if (aliases.bodyPart) data[aliases.bodyPart] = test.bodyPart.value;
+    if (aliases.otherName) {
+      data[aliases.otherName] = test.type.value;
+    }
+  });
+
   return createAdapterResult("ssa3368", "SSA-3368-BK", data);
+}
+
+function medicalTestAliases(
+  type: string | null,
+): {
+  provider: string;
+  date: string;
+  bodyPart?: string;
+  otherName?: string;
+} {
+  const normalized = type?.trim().toLocaleLowerCase() ?? "";
+  const simple: Array<{
+    terms: string[];
+    provider: string;
+    date: string;
+  }> = [
+    {
+      terms: ["blood"],
+      provider: "bloodTestNotHivHealthcareProviderOrFacility",
+      date: "bloodTestNotHivDateOfTest",
+    },
+    {
+      terms: ["breathing", "pulmonary"],
+      provider: "breathingTestHealthcareProviderOrFacility",
+      date: "breathingTestDateOfTest",
+    },
+    {
+      terms: ["cardiac catheter"],
+      provider: "cardiacCatheterizationHealthcareProviderOrFacility",
+      date: "cardiacCatheterizationDateOfTest",
+    },
+    {
+      terms: ["eeg", "brain wave"],
+      provider: "eegBrainWaveTestHealthcareProviderOrFacility",
+      date: "eegBrainWaveTestDateOfTest",
+    },
+    {
+      terms: ["ekg", "ecg", "heart test"],
+      provider: "ekgHeartTestHealthcareProviderOrFacility",
+      date: "ekgHeartTestDateOfTest",
+    },
+    {
+      terms: ["hearing"],
+      provider: "hearingTestHealthcareProviderOrFacility",
+      date: "hearingTestDateOfTest",
+    },
+    {
+      terms: ["hiv"],
+      provider: "hivTestHealthcareProviderOrFacility",
+      date: "hivTestDateOfTest",
+    },
+    {
+      terms: ["speech", "language test"],
+      provider: "speechLanguageTestHealthcareProviderOrFacility",
+      date: "speechLanguageTestDateOfTest",
+    },
+    {
+      terms: ["treadmill", "exercise test"],
+      provider: "treadmillExerciseTestHealthcareProviderOrFacility",
+      date: "treadmillExerciseTestDateOfTest",
+    },
+    {
+      terms: ["vision", "eye test"],
+      provider: "visionTestHealthcareProviderOrFacility",
+      date: "visionTestDateOfTest",
+    },
+    {
+      terms: ["psychological", "iq test"],
+      provider: "psychologicalIqTestHealthcareProviderOrFacility",
+      date: "psychologicalIqTestDateOfTest",
+    },
+  ];
+  const match = simple.find((entry) =>
+    entry.terms.some((term) => normalized.includes(term)),
+  );
+  if (match) return match;
+  if (normalized.includes("biopsy")) {
+    return {
+      provider: "biopsyHealthcareProviderOrFacility",
+      date: "biopsyDateOfTest",
+      bodyPart: "biopsyBodyPart",
+    };
+  }
+  if (normalized.includes("mri") || normalized.includes("ct scan")) {
+    return {
+      provider: "mriCtScanHealthcareProviderOrFacility",
+      date: "mriCtScanDateOfTest",
+      bodyPart: "mriCtScanBodyPart",
+    };
+  }
+  if (normalized.includes("x-ray") || normalized.includes("x ray")) {
+    return {
+      provider: "xRayHealthcareProviderOrFacility",
+      date: "xRayDateOfTest",
+      bodyPart: "xRayBodyPart",
+    };
+  }
+  return {
+    provider: "otherHealthcareProviderOrFacility",
+    date: "otherDateOfTest",
+    otherName: "otherPleaseSpecify",
+  };
 }
 
 function highestEducationAlias(level: string | null): string | null {

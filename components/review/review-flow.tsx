@@ -6,6 +6,7 @@ import {
   BriefcaseBusiness,
   Check,
   CircleAlert,
+  ClipboardList,
   Pencil,
   Pill,
   Stethoscope,
@@ -37,6 +38,7 @@ type ReviewSection =
   | "conditions"
   | "providers"
   | "medications"
+  | "evidence"
   | "work"
   | "family";
 
@@ -73,6 +75,12 @@ const sections: ReviewSectionItem[] = [
     pathPrefix: "medications.",
   },
   {
+    id: "evidence",
+    label: "Contacts & tests",
+    icon: ClipboardList,
+    pathPrefix: "medicalTests.",
+  },
+  {
     id: "work",
     label: "Work",
     icon: BriefcaseBusiness,
@@ -104,7 +112,7 @@ export function ReviewFlow() {
   );
   const initialSection =
     sections.find((section) =>
-      issues.some((issue) => issue.path.startsWith(section.pathPrefix)),
+      issues.some((issue) => issueBelongsToSection(issue.path, section)),
     )?.id ?? "applicant";
   const [activeSection, setActiveSection] =
     useState<ReviewSection>(initialSection);
@@ -185,14 +193,7 @@ export function ReviewFlow() {
             {sections.map((section) => {
               const Icon = section.icon;
               const issueCount = issues.filter((issue) =>
-                section.id === "family"
-                  ? [
-                      "marriages.",
-                      "children.",
-                      "servedInMilitary",
-                      "nonCitizen",
-                    ].some((prefix) => issue.path.startsWith(prefix))
-                  : issue.path.startsWith(section.pathPrefix),
+                issueBelongsToSection(issue.path, section),
               ).length;
               return (
                 <button
@@ -242,6 +243,9 @@ export function ReviewFlow() {
           {activeSection === "medications" ? (
             <MedicationsReview applicantCase={applicantCase} />
           ) : null}
+          {activeSection === "evidence" ? (
+            <EvidenceDetailsReview applicantCase={applicantCase} />
+          ) : null}
           {activeSection === "work" ? (
             <WorkReview applicantCase={applicantCase} />
           ) : null}
@@ -267,6 +271,40 @@ export function ReviewFlow() {
       </div>
     </div>
   );
+}
+
+function issueBelongsToSection(
+  path: string,
+  section: ReviewSectionItem,
+): boolean {
+  if (section.id === "applicant") {
+    return (
+      path.startsWith("applicant.") ||
+      [
+        "otherPublicDisabilityBenefitsFiled",
+        "otherPublicDisabilityBenefitTypes",
+        "bankDetailsReady",
+        "bankRoutingNumber",
+        "bankAccountNumber",
+        "bankAccountType",
+        "directDepositRefused",
+      ].includes(path)
+    );
+  }
+  if (section.id === "family") {
+    return [
+      "marriages.",
+      "children.",
+      "servedInMilitary",
+      "nonCitizen",
+    ].some((prefix) => path.startsWith(prefix));
+  }
+  if (section.id === "evidence") {
+    return ["claimContacts.", "medicalTests."].some((prefix) =>
+      path.startsWith(prefix),
+    );
+  }
+  return path.startsWith(section.pathPrefix);
 }
 
 function ReviewSummary({
@@ -305,6 +343,7 @@ function SectionHeading({ section }: { section: ReviewSection }) {
     conditions: ["Conditions", "Symptoms, dates, and effects on work"],
     providers: ["Providers", "Every practitioner, clinic, and hospital"],
     medications: ["Medications", "Dose, frequency, reason, and side effects"],
+    evidence: ["Contacts and tests", "People who can help and diagnostic tests"],
     work: ["Work history", "Jobs and why work ended"],
     family: ["Family and service", "Details that affect supporting documents"],
   };
@@ -349,6 +388,26 @@ function ApplicantReview({
         label="Citizenship"
         path="applicant.citizenship"
         value={applicantCase.applicant.citizenship}
+      />
+      <ReviewValue
+        label="Other disability programs"
+        path="otherPublicDisabilityBenefitTypes"
+        value={applicantCase.otherPublicDisabilityBenefitTypes}
+      />
+      <ReviewValue
+        label="Bank account type"
+        path="bankAccountType"
+        value={applicantCase.bankAccountType}
+      />
+      <ReviewValue
+        label="Routing number"
+        path="bankRoutingNumber"
+        value={applicantCase.bankRoutingNumber}
+      />
+      <ReviewValue
+        label="Account number"
+        path="bankAccountNumber"
+        value={applicantCase.bankAccountNumber}
       />
     </div>
   );
@@ -570,6 +629,75 @@ function WorkReview({ applicantCase }: { applicantCase: ApplicantCaseValue }) {
           />
         </article>
       ))}
+    </div>
+  );
+}
+
+function EvidenceDetailsReview({
+  applicantCase,
+}: {
+  applicantCase: ApplicantCaseValue;
+}) {
+  return (
+    <div>
+      {applicantCase.claimContacts.length ? (
+        applicantCase.claimContacts.map((contact, index) => (
+          <article
+            className="border-b border-border last:border-b-0"
+            key={contact.id}
+          >
+            <EntityHeading
+              name={contact.name.value || `Contact ${index + 1}`}
+            />
+            <ReviewValue
+              label="Relationship"
+              path={`claimContacts.${index}.relationship`}
+              value={contact.relationship}
+            />
+            <ReviewValue
+              label="Phone"
+              path={`claimContacts.${index}.phone`}
+              value={contact.phone}
+            />
+            <ReviewValue
+              label="Preferred language"
+              path={`claimContacts.${index}.preferredLanguage`}
+              value={contact.preferredLanguage}
+            />
+          </article>
+        ))
+      ) : (
+        <StaticCount label="Backup contacts" value={0} />
+      )}
+      {applicantCase.medicalTests.length ? (
+        applicantCase.medicalTests.map((test, index) => (
+          <article
+            className="border-b border-border last:border-b-0"
+            key={test.id}
+          >
+            <EntityHeading
+              name={test.type.value || `Medical test ${index + 1}`}
+            />
+            <ReviewValue
+              label="Body part"
+              path={`medicalTests.${index}.bodyPart`}
+              value={test.bodyPart}
+            />
+            <ReviewValue
+              label="Facility"
+              path={`medicalTests.${index}.providerOrFacility`}
+              value={test.providerOrFacility}
+            />
+            <ReviewValue
+              label="Date"
+              path={`medicalTests.${index}.date`}
+              value={test.date}
+            />
+          </article>
+        ))
+      ) : (
+        <StaticCount label="Medical tests" value={0} />
+      )}
     </div>
   );
 }

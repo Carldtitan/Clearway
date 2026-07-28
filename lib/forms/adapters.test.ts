@@ -67,6 +67,46 @@ describe("SSA form adapters", () => {
     expect(ssa3368.payload.data.writtenLanguageUsedEveryDay5D).toBe("English");
   });
 
+  it("maps a claim contact and diagnostic test into SSA-3368", () => {
+    const [, ssa3368] = buildFormPayloads(syntheticApplicant);
+    expect(ssa3368.payload.data.contactAvailable).toBe(
+      "Contact Available - Yes",
+    );
+    expect(ssa3368.payload.data.contactNameFirstMiddleInitialLast).toEqual({
+      firstName: "Sofia",
+      lastName: "Rivera",
+    });
+    expect(ssa3368.payload.data["8BMedicalTestsOrdered"]).toBe(
+      "8.B. Yes (Select tests from chart below)",
+    );
+    expect(ssa3368.payload.data.mriCtScanBodyPart).toBe("Lumbar spine");
+    expect(ssa3368.payload.data.mriCtScanHealthcareProviderOrFacility).toBe(
+      "Mercy General Hospital",
+    );
+    expect(ssa3368.payload.data.mriCtScanDateOfTest).toBe("2025-10-18");
+  });
+
+  it("maps reviewed direct-deposit and public-benefit answers into SSA-16", () => {
+    const applicantCase = structuredClone(syntheticApplicant);
+    applicantCase.otherPublicDisabilityBenefitsFiled.value = true;
+    applicantCase.otherPublicDisabilityBenefitTypes.value = [
+      "Veterans benefits",
+      "workers' compensation",
+    ];
+    const [ssa16] = buildFormPayloads(applicantCase);
+
+    expect(
+      ssa16.payload.data.otherPublicDisabilityBenefitsFiledQ20A,
+    ).toBe("Other Public Disability Benefits Filed - Yes");
+    expect(
+      ssa16.payload.data.otherPublicDisabilityBenefitsTypesQ20B,
+    ).toBe("Veterans Administration Benefits");
+    expect(ssa16.payload.data.accountType).toBe("Checking Account");
+    expect(ssa16.payload.data.routingTransitNumber).toBe("121000248");
+    expect(ssa16.payload.data.accountNumber).toBe("000123456789");
+    expect(ssa16.payload.data.remarks).toContain("workers' compensation");
+  });
+
   it("leaves SSA-827 SSA-only, signature, date, and witness fields blank", () => {
     const data = adaptSsa827(syntheticApplicant).payload.data;
     [

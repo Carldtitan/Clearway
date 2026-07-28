@@ -196,6 +196,26 @@ export const syntheticApplicant: ApplicantCase = {
   ],
   marriages: [],
   children: [],
+  claimContacts: [
+    {
+      id: "contact-sofia",
+      name: cv("Sofia Rivera", "confirmed"),
+      relationship: cv("Sister", "confirmed"),
+      address: cv(address, "confirmed"),
+      phone: cv("(916) 555-0162", "confirmed"),
+      speaksEnglish: cv(true, "confirmed"),
+      preferredLanguage: cv("English", "confirmed"),
+    },
+  ],
+  medicalTests: [
+    {
+      id: "test-mri",
+      type: cv("MRI/CT scan", "confirmed"),
+      bodyPart: cv("Lumbar spine", "confirmed"),
+      providerOrFacility: cv("Mercy General Hospital", "confirmed"),
+      date: cv("2025-10-18", "confirmed"),
+    },
+  ],
   education: {
     highestLevel: cv("12", "confirmed"),
     completionDate: cv("1996-06", "confirmed"),
@@ -222,6 +242,12 @@ export const syntheticApplicant: ApplicantCase = {
   workedLastYear: cv(true, "confirmed"),
   currentlyEarning: cv(true, "confirmed"),
   bankDetailsReady: cv(true, "confirmed"),
+  otherPublicDisabilityBenefitsFiled: cv(false, "confirmed"),
+  otherPublicDisabilityBenefitTypes: cv([], "confirmed"),
+  bankRoutingNumber: cv("121000248", "confirmed"),
+  bankAccountNumber: cv("000123456789", "confirmed"),
+  bankAccountType: cv("checking", "confirmed"),
+  directDepositRefused: cv(false, "confirmed"),
   interviewTurns: [],
   providerCollectionComplete: true,
   recordRequests: [

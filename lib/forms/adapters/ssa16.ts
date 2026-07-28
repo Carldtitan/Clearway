@@ -79,11 +79,54 @@ export function adaptSsa16(applicantCase: ApplicantCase) {
         : applicantCase.eligibilityInput.statutorilyBlind
           ? "Item 19 Blind or Low Vision Yes"
           : "Item 19 Blind or Low Vision No",
-    remarks:
+    otherPublicDisabilityBenefitsFiledQ20A:
+      applicantCase.otherPublicDisabilityBenefitsFiled.value === null
+        ? null
+        : applicantCase.otherPublicDisabilityBenefitsFiled.value
+          ? "Other Public Disability Benefits Filed - Yes"
+          : "Other Public Disability Benefits Filed - No",
+    otherPublicDisabilityBenefitsTypesQ20B: publicBenefitOption(
+      applicantCase.otherPublicDisabilityBenefitTypes.value?.[0] ?? null,
+    ),
+    accountType: bankAccountOption(applicantCase.bankAccountType.value),
+    routingTransitNumber: digitsOnly(applicantCase.bankRoutingNumber.value),
+    accountNumber: digitsOnly(applicantCase.bankAccountNumber.value),
+    directDepositOption:
+      applicantCase.directDepositRefused.value === true
+        ? "Direct Deposit Refused"
+        : null,
+    remarks: [
       "Prepared from applicant-reviewed answers. Applicant must review, sign, and file.",
+      applicantCase.otherPublicDisabilityBenefitTypes.value &&
+      applicantCase.otherPublicDisabilityBenefitTypes.value.length > 1
+        ? `Other public disability programs reported: ${applicantCase.otherPublicDisabilityBenefitTypes.value.join(", ")}.`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
     telephoneNumberIncludeAreaCode: applicant.phone.value,
     applicantMailingAddress: mailingAddress,
   };
 
   return createAdapterResult("ssa16", "SSA-16-BK", data);
+}
+
+function publicBenefitOption(value: string | null): string | null {
+  const normalized = value?.trim().toLocaleLowerCase() ?? "";
+  if (!normalized) return null;
+  if (normalized.includes("veteran") || normalized.includes("va benefit")) {
+    return "Veterans Administration Benefits";
+  }
+  if (normalized.includes("supplemental") || normalized === "ssi") {
+    return "Supplemental Security Income";
+  }
+  if (normalized.includes("welfare")) return "Welfare";
+  return "Other (Workers' Compensation/Public Disability)";
+}
+
+function bankAccountOption(value: string | null): string | null {
+  const normalized = value?.trim().toLocaleLowerCase() ?? "";
+  if (normalized.includes("checking")) return "Checking Account";
+  if (normalized.includes("saving")) return "Savings Account";
+  return null;
 }

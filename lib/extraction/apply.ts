@@ -5,9 +5,11 @@ import type {
   CaptureSource,
   CaseAction,
   Child,
+  ClaimContact,
   Condition,
   Job,
   Marriage,
+  MedicalTest,
   Medication,
   PhysicalDemands,
   PostalAddress,
@@ -125,6 +127,32 @@ export function applyInterviewExtraction(
           entity: childFrom(facts, turnId, source, createId, confirmed),
         });
         break;
+      case "claimContact":
+        dispatch({
+          type: "ADD_ENTITY",
+          collection: "claimContacts",
+          entity: claimContactFrom(
+            facts,
+            turnId,
+            source,
+            createId,
+            confirmed,
+          ),
+        });
+        break;
+      case "medicalTest":
+        dispatch({
+          type: "ADD_ENTITY",
+          collection: "medicalTests",
+          entity: medicalTestFrom(
+            facts,
+            turnId,
+            source,
+            createId,
+            confirmed,
+          ),
+        });
+        break;
     }
   });
 
@@ -175,6 +203,12 @@ const scalarFields = new Set<ExtractedFact["field"]>([
   "workedLastYear",
   "currentlyEarning",
   "bankDetailsReady",
+  "otherPublicDisabilityBenefitsFiled",
+  "otherPublicDisabilityBenefitTypes",
+  "bankRoutingNumber",
+  "bankAccountNumber",
+  "bankAccountType",
+  "directDepositRefused",
 ]);
 
 function compatibleFact(fact: ExtractedFact): boolean {
@@ -321,6 +355,48 @@ function childFrom(
   };
 }
 
+function claimContactFrom(
+  facts: ExtractedFact[],
+  turnId: string,
+  source: CaptureSource,
+  createId: IdFactory,
+  confirmed: boolean,
+): ClaimContact {
+  const confidence = lowestConfidence(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
+  return {
+    id: createId("claim-contact"),
+    name: value(one(facts, "claimContact.name")),
+    relationship: value(one(facts, "claimContact.relationship")),
+    address: value(entityAddress(facts, "claimContact")),
+    phone: value(one(facts, "claimContact.phone")),
+    speaksEnglish: value(yesNoValue(facts, "claimContact.speaksEnglish")),
+    preferredLanguage: value(one(facts, "claimContact.preferredLanguage")),
+  };
+}
+
+function medicalTestFrom(
+  facts: ExtractedFact[],
+  turnId: string,
+  source: CaptureSource,
+  createId: IdFactory,
+  confirmed: boolean,
+): MedicalTest {
+  const confidence = lowestConfidence(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
+  return {
+    id: createId("medical-test"),
+    type: value(one(facts, "medicalTest.type")),
+    bodyPart: value(one(facts, "medicalTest.bodyPart")),
+    providerOrFacility: value(
+      one(facts, "medicalTest.providerOrFacility"),
+    ),
+    date: value(one(facts, "medicalTest.date")),
+  };
+}
+
 function physicalDemandsFrom(
   facts: ExtractedFact[],
 ): PhysicalDemands | null {
@@ -347,24 +423,42 @@ function physicalDemandsFrom(
 }
 
 function providerAddress(facts: ExtractedFact[]): PostalAddress | null {
-  const line1 = one(facts, "provider.addressLine1");
-  const city = one(facts, "provider.city");
-  const state = one(facts, "provider.state");
-  const zip = one(facts, "provider.zip");
+  return entityAddress(facts, "provider");
+}
+
+function entityAddress(
+  facts: ExtractedFact[],
+  prefix: "provider" | "claimContact",
+): PostalAddress | null {
+  const line1 = one(facts, `${prefix}.addressLine1`);
+  const city = one(facts, `${prefix}.city`);
+  const state = one(facts, `${prefix}.state`);
+  const zip = one(facts, `${prefix}.zip`);
   if (!line1 || !city || !state || !zip) return null;
   return {
     line1,
-    line2: one(facts, "provider.addressLine2") ?? undefined,
+    line2: one(facts, `${prefix}.addressLine2`) ?? undefined,
     city,
     state,
     zip,
   };
 }
 
+function yesNoValue(
+  facts: ExtractedFact[],
+  field: ExtractedFact["field"],
+): boolean | null {
+  const value = one(facts, field)?.trim().toLocaleLowerCase();
+  if (value === "yes" || value === "true") return true;
+  if (value === "no" || value === "false") return false;
+  return null;
+}
+
 function scalarValue(fact: ExtractedFact): string | string[] | boolean {
   if (
     fact.field === "applicant.otherNames" ||
-    fact.field === "education.training"
+    fact.field === "education.training" ||
+    fact.field === "otherPublicDisabilityBenefitTypes"
   ) {
     return fact.value
       .split(",")
@@ -378,6 +472,8 @@ function scalarValue(fact: ExtractedFact): string | string[] | boolean {
       "workedLastYear",
       "currentlyEarning",
       "bankDetailsReady",
+      "otherPublicDisabilityBenefitsFiled",
+      "directDepositRefused",
       "education.specialEducation",
     ].includes(fact.field)
   ) {
@@ -421,7 +517,10 @@ function isAddressComponent(field: ExtractedFact["field"]) {
 }
 
 function isRepeatedScalar(field: ExtractedFact["field"]) {
-  return field === "education.training";
+  return (
+    field === "education.training" ||
+    field === "otherPublicDisabilityBenefitTypes"
+  );
 }
 
 function applyAddressScalars(
@@ -507,21 +606,36 @@ function applyRepeatedScalars(
   source: CaptureSource,
   confirmed: boolean,
 ) {
-  const trainingFacts = facts.filter(
-    (fact) => fact.kind === "scalar" && fact.field === "education.training",
-  );
-  if (!trainingFacts.length) return;
-  dispatch({
-    type: "APPLY_CANDIDATE_PATCH",
-    patch: {
+  const definitions = [
+    {
+      field: "education.training",
       path: "education.training",
-      value: trainingFacts.map((fact) => fact.value),
-      confidence: lowestConfidence(trainingFacts),
-      evidenceText: trainingFacts.map((fact) => fact.evidenceText).join(" "),
-      turnId,
-      source,
-      confirmed,
     },
+    {
+      field: "otherPublicDisabilityBenefitTypes",
+      path: "otherPublicDisabilityBenefitTypes",
+    },
+  ] satisfies Array<{ field: ExtractedFact["field"]; path: string }>;
+  definitions.forEach((definition) => {
+    const matchingFacts = facts.filter(
+      (fact) =>
+        fact.kind === "scalar" && fact.field === definition.field,
+    );
+    if (!matchingFacts.length) return;
+    dispatch({
+      type: "APPLY_CANDIDATE_PATCH",
+      patch: {
+        path: definition.path,
+        value: matchingFacts.map((fact) => fact.value),
+        confidence: lowestConfidence(matchingFacts),
+        evidenceText: matchingFacts
+          .map((fact) => fact.evidenceText)
+          .join(" "),
+        turnId,
+        source,
+        confirmed,
+      },
+    });
   });
 }
 

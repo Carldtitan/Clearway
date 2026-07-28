@@ -193,6 +193,61 @@ describe("interview extraction boundary", () => {
       "transfer belt",
     ]);
   });
+
+  it("maps a spoken claim contact and medical test", () => {
+    let applicantCase = createEmptyApplicantCase();
+    const dispatch = (action: CaseAction) => {
+      applicantCase = caseReducer(applicantCase, action);
+    };
+
+    applyInterviewExtraction(
+      dispatch,
+      {
+        summary: "Contact and MRI captured.",
+        followUpQuestion: "",
+        providerListStatus: "unknown",
+        facts: [
+          entity(
+            "claimContact",
+            "sofia",
+            "claimContact.name",
+            "Sofia Rivera",
+          ),
+          entity(
+            "claimContact",
+            "sofia",
+            "claimContact.relationship",
+            "sister",
+          ),
+          entity(
+            "claimContact",
+            "sofia",
+            "claimContact.speaksEnglish",
+            "yes",
+          ),
+          entity("medicalTest", "mri", "medicalTest.type", "MRI/CT scan"),
+          entity("medicalTest", "mri", "medicalTest.bodyPart", "lumbar spine"),
+          entity(
+            "medicalTest",
+            "mri",
+            "medicalTest.providerOrFacility",
+            "Mercy General Hospital",
+          ),
+          entity("medicalTest", "mri", "medicalTest.date", "2025-10-18"),
+        ],
+      },
+      "turn-evidence",
+      {
+        confirmed: true,
+        createId: (prefix) => `${prefix}-evidence`,
+      },
+    );
+
+    expect(applicantCase.claimContacts[0].name.value).toBe("Sofia Rivera");
+    expect(applicantCase.claimContacts[0].speaksEnglish.value).toBe(true);
+    expect(applicantCase.medicalTests[0].type.value).toBe("MRI/CT scan");
+    expect(applicantCase.medicalTests[0].bodyPart.value).toBe("lumbar spine");
+  });
 });
 
 function scalar(
