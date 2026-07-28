@@ -1,0 +1,206 @@
+import type {
+  AddEntityAction,
+  ApplicantCase,
+  CanonicalValue,
+  CaseAction,
+} from "@/lib/case/types";
+
+export function caseReducer(
+  state: ApplicantCase,
+  action: CaseAction,
+): ApplicantCase {
+  switch (action.type) {
+    case "LOAD_CASE":
+      return structuredClone(action.applicantCase);
+    case "SET_ELIGIBILITY_INPUT":
+      return changed(state, {
+        ...state,
+        eligibilityInput: { ...state.eligibilityInput, ...action.patch },
+      });
+    case "ADD_INTERVIEW_TURN":
+      return {
+        ...state,
+        interviewTurns: [...state.interviewTurns, action.turn],
+      };
+    case "UPDATE_INTERVIEW_TURN":
+      return {
+        ...state,
+        interviewTurns: state.interviewTurns.map((turn) =>
+          turn.id === action.turnId ? { ...turn, ...action.patch } : turn,
+        ),
+      };
+    case "ADD_ENTITY":
+      return changed(state, addEntity(state, action));
+    case "DELETE_ENTITY":
+      return changed(state, {
+        ...state,
+        [action.collection]: state[action.collection].filter(
+          (entry) => entry.id !== action.id,
+        ),
+      });
+    case "SET_PROVIDER_COLLECTION_COMPLETE":
+      return changed(state, {
+        ...state,
+        providerCollectionComplete: action.complete,
+      });
+    case "SET_STAGE":
+      return { ...state, stage: action.stage };
+    case "SET_DOCUMENT_STATE":
+      return { ...state, documentState: action.state };
+    case "SET_RECORD_REQUEST":
+      return changed(state, {
+        ...state,
+        recordRequests: upsert(
+          state.recordRequests,
+          action.request,
+        ),
+      });
+    case "EDIT_VALUE":
+      return changed(state, updateCanonicalAtPath(state, action.path, action.value, "typed"));
+    case "CONFIRM_VALUE":
+      return changed(state, confirmAtPath(state, action.path));
+    case "APPLY_CANDIDATE_PATCH":
+      return changed(
+        state,
+        applyCandidateAtPath(state, action.patch.path, action.patch.value, action.patch.confidence, action.patch.turnId),
+      );
+    default:
+      return state;
+  }
+}
+
+export function isPacketStale(state: ApplicantCase): boolean {
+  return (
+    state.documentState.generatedRevision !== null &&
+    state.documentState.generatedRevision !== state.revision
+  );
+}
+
+function changed(
+  previous: ApplicantCase,
+  next: ApplicantCase,
+): ApplicantCase {
+  return {
+    ...next,
+    revision: previous.revision + 1,
+  };
+}
+
+function addEntity(
+  state: ApplicantCase,
+  action: AddEntityAction,
+): ApplicantCase {
+  switch (action.collection) {
+    case "conditions":
+      return { ...state, conditions: [...state.conditions, action.entity] };
+    case "providers":
+      return { ...state, providers: [...state.providers, action.entity] };
+    case "medications":
+      return { ...state, medications: [...state.medications, action.entity] };
+    case "jobs":
+      return { ...state, jobs: [...state.jobs, action.entity] };
+    case "marriages":
+      return { ...state, marriages: [...state.marriages, action.entity] };
+    case "children":
+      return { ...state, children: [...state.children, action.entity] };
+  }
+}
+
+function upsert<T extends { id: string }>(items: T[], next: T): T[] {
+  return items.some((item) => item.id === next.id)
+    ? items.map((item) => (item.id === next.id ? next : item))
+    : [...items, next];
+}
+
+function updateCanonicalAtPath(
+  state: ApplicantCase,
+  path: string,
+  value: unknown,
+  source: "typed" | "voice",
+): ApplicantCase {
+  return mapPath(state, path, () => ({
+    value,
+    provenance: {
+      source,
+      state: "confirmed",
+      capturedAt: new Date().toISOString(),
+    },
+  }));
+}
+
+function confirmAtPath(
+  state: ApplicantCase,
+  path: string,
+): ApplicantCase {
+  return mapPath(state, path, (current) => ({
+    ...current,
+    provenance: {
+      ...current.provenance,
+      state: "confirmed",
+    },
+    conflictingValues: undefined,
+  }));
+}
+
+function applyCandidateAtPath(
+  state: ApplicantCase,
+  path: string,
+  value: unknown,
+  confidence: number,
+  turnId: string,
+): ApplicantCase {
+  return mapPath(state, path, (current) => {
+    if (
+      current.provenance.state === "confirmed" &&
+      JSON.stringify(current.value) !== JSON.stringify(value)
+    ) {
+      return {
+        ...current,
+        provenance: { ...current.provenance, state: "conflict" },
+        conflictingValues: [
+          ...(current.conflictingValues ?? []),
+          { value, source: "voice", turnId },
+        ],
+      };
+    }
+    return {
+      value,
+      provenance: {
+        source: "voice",
+        state: "unconfirmed",
+        confidence,
+        turnId,
+        capturedAt: new Date().toISOString(),
+      },
+    };
+  });
+}
+
+function mapPath(
+  state: ApplicantCase,
+  path: string,
+  mapper: (current: CanonicalValue<unknown>) => CanonicalValue<unknown>,
+): ApplicantCase {
+  const parts = path.split(".");
+  const clone = structuredClone(state) as unknown as Record<string, unknown>;
+  let cursor: Record<string, unknown> = clone;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const next = cursor[parts[index]];
+    if (!next || typeof next !== "object" || Array.isArray(next)) {
+      throw new Error(`Unsupported canonical path: ${path}`);
+    }
+    cursor = next as Record<string, unknown>;
+  }
+  const key = parts.at(-1);
+  if (!key) throw new Error(`Unsupported canonical path: ${path}`);
+  const current = cursor[key];
+  if (
+    !current ||
+    typeof current !== "object" ||
+    !("provenance" in current)
+  ) {
+    throw new Error(`Path is not a canonical value: ${path}`);
+  }
+  cursor[key] = mapper(current as CanonicalValue<unknown>);
+  return clone as unknown as ApplicantCase;
+}

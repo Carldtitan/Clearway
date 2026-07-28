@@ -5,6 +5,7 @@ node_modules/
 .next/
 .vercel
 *.log
+*.tsbuildinfo
 .env.backup
 .env.*
 !.env.example
