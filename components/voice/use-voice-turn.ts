@@ -28,6 +28,8 @@ export function useVoiceTurn() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const shouldTranscribeRef = useRef(true);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   const stopMeter = useCallback(() => {
     if (animationRef.current !== null) {
@@ -97,6 +99,41 @@ export function useVoiceTurn() {
   const speak = useCallback(async (text: string) => {
     setError(null);
     setState("speaking");
+    audioRef.current?.pause();
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    try {
+      const response = await fetch("/api/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        audioUrlRef.current = url;
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        await new Promise<void>((resolve, reject) => {
+          audio.addEventListener("ended", () => resolve(), { once: true });
+          audio.addEventListener(
+            "error",
+            () => reject(new Error("Generated speech could not play.")),
+            { once: true },
+          );
+          audio.play().catch(reject);
+        });
+        audioRef.current = null;
+        URL.revokeObjectURL(url);
+        audioUrlRef.current = null;
+        setState("idle");
+        return;
+      }
+    } catch {
+      // Browser speech below is the no-network and autoplay-safe fallback.
+    }
     if (
       !("speechSynthesis" in window) ||
       !("SpeechSynthesisUtterance" in window)
@@ -224,6 +261,12 @@ export function useVoiceTurn() {
   useEffect(
     () => () => {
       window.speechSynthesis?.cancel();
+      audioRef.current?.pause();
+      audioRef.current = null;
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
       stopMeter();
       const recorder = recorderRef.current;
       if (recorder && recorder.state !== "inactive") {
