@@ -359,6 +359,9 @@ function ProvidersReview({
 }) {
   const { dispatch } = useApplicantCase();
   if (!applicantCase.providers.length) return <EmptyReview noun="providers" />;
+  const possibleDuplicates = possibleDuplicateProviderIds(
+    applicantCase.providers,
+  );
   return (
     <div>
       {applicantCase.providers.map((provider, index) => (
@@ -382,6 +385,16 @@ function ProvidersReview({
               }
             }}
           />
+          {possibleDuplicates.has(provider.id) ? (
+            <p className="flex gap-2 border-b border-warning/20 bg-warning-soft/55 px-5 py-3 text-sm leading-relaxed text-warning sm:px-6">
+              <CircleAlert
+                aria-hidden="true"
+                className="mt-0.5 size-4 shrink-0"
+              />
+              Possible duplicate. Confirm both if they are separate sources, or
+              remove this one if it repeats another provider.
+            </p>
+          ) : null}
           <ReviewValue
             label="Facility"
             path={`providers.${index}.facility`}
@@ -719,4 +732,29 @@ function formatValue(value: unknown): string {
       .join(", ");
   }
   return String(value);
+}
+
+function possibleDuplicateProviderIds(
+  providers: ApplicantCaseValue["providers"],
+): Set<string> {
+  const duplicateIds = new Set<string>();
+  providers.forEach((provider, index) => {
+    const name = normalized(provider.name.value);
+    const facility = normalized(provider.facility.value);
+    providers.slice(0, index).forEach((earlier) => {
+      const sameName =
+        name.length > 0 && name === normalized(earlier.name.value);
+      const sameFacility =
+        facility.length > 0 && facility === normalized(earlier.facility.value);
+      if (sameName || sameFacility) {
+        duplicateIds.add(earlier.id);
+        duplicateIds.add(provider.id);
+      }
+    });
+  });
+  return duplicateIds;
+}
+
+function normalized(value: string | null): string {
+  return (value ?? "").toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
 }

@@ -36,7 +36,7 @@ type InterviewStatus =
   | "ready"
   | "error";
 
-const PROMPT =
+const INITIAL_PROMPT =
   "How do your health problems affect your work—and who has treated you?";
 
 const factLabels: Record<string, string> = {
@@ -59,6 +59,7 @@ export function InterviewFlow() {
   const { applicantCase, dispatch } = useApplicantCase();
   const [mode, setMode] = useState<InputMode>("voice");
   const [status, setStatus] = useState<InterviewStatus>("idle");
+  const [prompt, setPrompt] = useState(INITIAL_PROMPT);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [transcript, setTranscript] = useState("");
   const [extraction, setExtraction] = useState<InterviewExtraction | null>(
@@ -75,7 +76,10 @@ export function InterviewFlow() {
     paused: "Paused — your answer is still here",
     transcribing: "Turning speech into text",
     extracting: "Finding facts for your review",
-    ready: "Captured for review",
+    ready:
+      extraction?.providerListStatus === "complete"
+        ? "Captured for review"
+        : "Ready for your next answer",
     error: "Needs your attention",
   }[status];
 
@@ -153,7 +157,7 @@ export function InterviewFlow() {
       type: "ADD_INTERVIEW_TURN",
       turn: {
         id: turnId,
-        prompt: PROMPT,
+        prompt,
         transcript: cleanTranscript,
         source,
         status: "extracting",
@@ -167,6 +171,13 @@ export function InterviewFlow() {
           ? await demoExtraction()
           : await requestExtraction(turnId, cleanTranscript);
       setExtraction(nextExtraction);
+      if (
+        nextExtraction.providerListStatus !== "complete" &&
+        nextExtraction.followUpQuestion.trim()
+      ) {
+        setPrompt(nextExtraction.followUpQuestion.trim());
+      }
+      if (source === "typed") setTypedAnswer("");
       if (applicantCase.mode !== "synthetic_demo") {
         applyInterviewExtraction(dispatch, nextExtraction, turnId);
       }
@@ -194,12 +205,13 @@ export function InterviewFlow() {
   function speakPrompt() {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(PROMPT);
+    const utterance = new SpeechSynthesisUtterance(prompt);
     utterance.rate = 0.94;
     window.speechSynthesis.speak(utterance);
   }
 
-  const hasResult = status === "ready" && extraction;
+  const hasResult =
+    status === "ready" && extraction?.providerListStatus === "complete";
 
   return (
     <div className="mx-auto grid w-full max-w-[76rem] gap-8 xl:grid-cols-[minmax(0,1fr)_19rem] xl:gap-12">
@@ -209,7 +221,7 @@ export function InterviewFlow() {
             Interview · Your story
           </p>
           <h1 className="mt-3 max-w-[18ch] text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
-            {PROMPT}
+            {prompt}
           </h1>
           <Button
             className="-ml-3 mt-3"
@@ -411,7 +423,7 @@ export function InterviewFlow() {
           ) : null}
         </div>
 
-        {transcript ? (
+        {applicantCase.interviewTurns.length ? (
           <details
             className="group mt-5 rounded-[var(--radius-control)] border border-border bg-surface"
             open={status === "error"}
@@ -423,10 +435,28 @@ export function InterviewFlow() {
                 className="size-4 transition-transform group-open:rotate-180"
               />
             </summary>
-            <p className="border-t border-border px-4 py-4 leading-relaxed text-muted">
-              {transcript}
-            </p>
+            <ol className="grid gap-4 border-t border-border px-4 py-4">
+              {applicantCase.interviewTurns.map((turn) => (
+                <li className="leading-relaxed" key={turn.id}>
+                  <p className="text-xs font-bold text-primary">
+                    {turn.prompt}
+                  </p>
+                  <p className="mt-1 text-muted">{turn.transcript}</p>
+                </li>
+              ))}
+            </ol>
           </details>
+        ) : null}
+
+        {status === "ready" &&
+        extraction?.providerListStatus !== "complete" ? (
+          <div
+            className="mt-5 rounded-[var(--radius-control)] bg-accent-soft p-4 text-sm leading-relaxed text-accent"
+            role="status"
+          >
+            Keep going until you have named every doctor, clinic, hospital, or
+            other place that treated any condition.
+          </div>
         ) : null}
 
         {hasResult ? (

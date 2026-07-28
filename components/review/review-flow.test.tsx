@@ -33,6 +33,30 @@ describe("ReviewFlow", () => {
     await user.click(buildButton);
     expect(screen.getByTestId("case-stage")).toHaveTextContent("packet");
   });
+
+  it("surfaces possible duplicate providers without merging them", async () => {
+    const user = userEvent.setup();
+    const reviewCase = structuredClone(syntheticApplicant);
+    reviewCase.stage = "review";
+    reviewCase.providers.push({
+      ...structuredClone(reviewCase.providers[0]),
+      id: "possible-duplicate-provider",
+    });
+
+    render(
+      <CaseProvider initialCase={reviewCase}>
+        <ReviewFlow />
+      </CaseProvider>,
+    );
+    await user.click(screen.getByRole("button", { name: /Providers/ }));
+
+    expect(screen.getAllByText(/Possible duplicate/)).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", {
+        name: `Remove ${reviewCase.providers[0].name.value}`,
+      }),
+    ).toHaveLength(2);
+  });
 });
 
 function StageProbe() {

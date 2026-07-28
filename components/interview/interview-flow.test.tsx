@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CaseProvider, useApplicantCase } from "@/components/app/case-context";
 import { InterviewFlow } from "@/components/interview/interview-flow";
@@ -8,6 +8,10 @@ import { InterviewFlow } from "@/components/interview/interview-flow";
 vi.mock("@/components/visual/orb", () => ({
   default: () => <div data-testid="voice-orb" />,
 }));
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("InterviewFlow", () => {
   it("turns the demo transcript into visible facts before review", async () => {
@@ -82,6 +86,55 @@ describe("InterviewFlow", () => {
     ).toBeVisible();
     expect(screen.getByLabelText("Your answer")).toHaveFocus();
   });
+
+  it("requires explicit provider-list completion before review", async () => {
+    const user = userEvent.setup();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        extractionResponse(
+          "Did any other doctor, clinic, or hospital treat you?",
+          "more_possible",
+        ),
+      )
+      .mockResolvedValueOnce(
+        extractionResponse(
+          "Your provider list is complete.",
+          "complete",
+        ),
+      );
+    vi.stubGlobal("fetch", request);
+    render(
+      <CaseProvider>
+        <InterviewFlow />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Type" }));
+    await user.type(screen.getByLabelText("Your answer"), "Dr. Lee treated me.");
+    await user.click(
+      screen.getByRole("button", { name: "Find reviewable facts" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Did any other doctor, clinic, or hospital treat you?",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Review captured facts" }),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Your answer"), "No one else.");
+    await user.click(
+      screen.getByRole("button", { name: "Find reviewable facts" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Review captured facts" }),
+    ).toBeVisible();
+    expect(request).toHaveBeenCalledTimes(2);
+  });
 });
 
 function StageProbe() {
@@ -126,4 +179,21 @@ class FakeMediaRecorder {
   stop() {
     this.state = "inactive";
   }
+}
+
+function extractionResponse(
+  followUpQuestion: string,
+  providerListStatus: "complete" | "more_possible",
+) {
+  return {
+    ok: true,
+    json: async () => ({
+      extraction: {
+        summary: "Provider follow-up",
+        followUpQuestion,
+        providerListStatus,
+        facts: [],
+      },
+    }),
+  };
 }
