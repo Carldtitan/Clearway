@@ -38,32 +38,27 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
-        voiceId,
-      )}?output_format=mp3_44100_128&enable_logging=false`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "audio/mpeg",
-          "Content-Type": "application/json",
-          "xi-api-key": process.env.ELEVENLABS_API_KEY,
-        },
-        body: JSON.stringify({
-          text: parsed.data.text,
-          model_id:
-            process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.55,
-            similarity_boost: 0.75,
-            style: 0.1,
-            use_speaker_boost: true,
-          },
-        }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(20_000),
-      },
-    );
+    let response = await requestSpeech(voiceId, parsed.data.text);
+    let voiceProfile = "localized";
+
+    const fallbackVoiceId =
+      process.env.ELEVENLABS_VOICE_ID_EN ??
+      process.env.ELEVENLABS_VOICE_ID;
+    if (
+      !response.ok &&
+      parsed.data.locale !== "en-US" &&
+      fallbackVoiceId &&
+      fallbackVoiceId !== voiceId &&
+      isUnavailableVoice(response.status)
+    ) {
+      console.warn("ElevenLabs localized voice unavailable; using the multilingual fallback", {
+        locale: parsed.data.locale,
+        status: response.status,
+      });
+      response = await requestSpeech(fallbackVoiceId, parsed.data.text);
+      voiceProfile = "multilingual-fallback";
+    }
+
     if (!response.ok) {
       console.error("ElevenLabs speech failed", { status: response.status });
       return noStore(
@@ -78,8 +73,10 @@ export async function POST(request: Request) {
       status: 200,
       headers: {
         "Cache-Control": "no-store, max-age=0",
+        "Content-Language": parsed.data.locale,
         "Content-Type": response.headers.get("Content-Type") || "audio/mpeg",
         "Content-Length": String(audio.byteLength),
+        "X-Voice-Profile": voiceProfile,
       },
     });
   } catch (error) {
@@ -102,6 +99,38 @@ function voiceIdFor(locale: SupportedLocale): string | undefined {
   if (locale === "en-US") return process.env.ELEVENLABS_VOICE_ID;
   if (locale === "es-US") return "KHCvMklQZZo0O30ERnVn";
   return "bhJUNIXWQQ94l8eI2VUf";
+}
+
+function requestSpeech(voiceId: string, text: string) {
+  return fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
+      voiceId,
+    )}?output_format=mp3_44100_128&enable_logging=false`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": process.env.ELEVENLABS_API_KEY!,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
+        voice_settings: {
+          stability: 0.55,
+          similarity_boost: 0.75,
+          style: 0.1,
+          use_speaker_boost: true,
+        },
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    },
+  );
+}
+
+function isUnavailableVoice(status: number) {
+  return status === 402 || status === 403 || status === 404 || status === 422;
 }
 
 async function safeJson(request: Request): Promise<unknown> {
