@@ -15,6 +15,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { BrandMark } from "@/components/app/brand-mark";
 import { useApplicantCase } from "@/components/app/case-context";
 import { CheckFlow } from "@/components/check/check-flow";
+import { InterviewFlow } from "@/components/interview/interview-flow";
 import type { ApplicantCase } from "@/lib/case/types";
 import { cn } from "@/lib/utils";
 
@@ -158,7 +159,10 @@ export function Workspace() {
               transition={{ duration: 0.16 }}
             >
               {applicantCase.stage === "check" ? <CheckFlow /> : null}
-              {applicantCase.stage !== "check" ? (
+              {applicantCase.stage === "interview" ? <InterviewFlow /> : null}
+              {applicantCase.stage === "review" ||
+              applicantCase.stage === "packet" ||
+              applicantCase.stage === "records" ? (
                 <StagePlaceholder stage={applicantCase.stage} />
               ) : null}
             </motion.div>
