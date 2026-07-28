@@ -7,8 +7,10 @@ import {
   Keyboard,
   Mic,
   Pause,
+  Play,
   RotateCcw,
   Sparkles,
+  Square,
   Volume2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -28,6 +30,7 @@ type InterviewStatus =
   | "idle"
   | "requesting"
   | "recording"
+  | "paused"
   | "transcribing"
   | "extracting"
   | "ready"
@@ -69,6 +72,7 @@ export function InterviewFlow() {
     idle: "Ready when you are",
     requesting: "Waiting for microphone",
     recording: "Listening",
+    paused: "Paused — your answer is still here",
     transcribing: "Turning speech into text",
     extracting: "Finding facts for your review",
     ready: "Captured for review",
@@ -105,6 +109,27 @@ export function InterviewFlow() {
       );
       setMode("typed");
       setStatus("error");
+    }
+  }
+
+  function pauseVoice() {
+    try {
+      recorder.pause();
+      setStatus("paused");
+    } catch {
+      setError("Recording could not pause. You can finish or type instead.");
+      setStatus("recording");
+    }
+  }
+
+  function resumeVoice() {
+    try {
+      recorder.resume();
+      setStatus("recording");
+      setError(null);
+    } catch {
+      setError("Recording could not resume. You can finish or type instead.");
+      setStatus("paused");
     }
   }
 
@@ -244,9 +269,13 @@ export function InterviewFlow() {
                   rotateOnHover
                 />
                 <span className="pointer-events-none absolute inset-0 grid place-items-center">
-                  {status === "recording" ? (
+                  {status === "recording" || status === "paused" ? (
                     <span className="grid size-14 place-items-center rounded-full bg-surface text-primary shadow-lg">
-                      <Pause aria-hidden="true" className="size-5" />
+                      {status === "recording" ? (
+                        <Mic aria-hidden="true" className="size-5" />
+                      ) : (
+                        <Pause aria-hidden="true" className="size-5" />
+                      )}
                     </span>
                   ) : null}
                 </span>
@@ -269,37 +298,60 @@ export function InterviewFlow() {
               {status !== "ready" ||
               extraction?.providerListStatus !== "complete" ? (
                 <div className="mt-5 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:gap-3">
-                  {status === "recording" ? (
-                    <Button className="px-3" onClick={finishVoice}>
-                      <Pause aria-hidden="true" className="size-4" />
-                      Stop recording
-                    </Button>
+                  {status === "recording" || status === "paused" ? (
+                    <>
+                      <Button
+                        className="px-3"
+                        onClick={
+                          status === "recording" ? pauseVoice : resumeVoice
+                        }
+                      >
+                        {status === "recording" ? (
+                          <Pause aria-hidden="true" className="size-4" />
+                        ) : (
+                          <Play aria-hidden="true" className="size-4" />
+                        )}
+                        {status === "recording" ? "Pause" : "Resume"}
+                      </Button>
+                      <Button
+                        className="px-3"
+                        onClick={finishVoice}
+                        variant="secondary"
+                      >
+                        <Square aria-hidden="true" className="size-4" />
+                        Finish answer
+                      </Button>
+                    </>
                   ) : (
-                    <Button
-                      className="px-3"
-                      disabled={[
-                        "requesting",
-                        "transcribing",
-                        "extracting",
-                      ].includes(status)}
-                      onClick={beginVoice}
-                    >
-                      <Mic aria-hidden="true" className="size-4" />
-                      Record answer
-                    </Button>
+                    <>
+                      <Button
+                        className="px-3"
+                        disabled={[
+                          "requesting",
+                          "transcribing",
+                          "extracting",
+                        ].includes(status)}
+                        onClick={beginVoice}
+                      >
+                        <Mic aria-hidden="true" className="size-4" />
+                        Record answer
+                      </Button>
+                      <Button
+                        className="px-3"
+                        disabled={status === "extracting"}
+                        onClick={() =>
+                          submitTranscript(DEMO_TRANSCRIPT, "demo")
+                        }
+                        variant="secondary"
+                      >
+                        <Sparkles
+                          aria-hidden="true"
+                          className="size-4 text-primary"
+                        />
+                        Demo answer
+                      </Button>
+                    </>
                   )}
-                  <Button
-                    className="px-3"
-                    disabled={status === "extracting"}
-                    onClick={() => submitTranscript(DEMO_TRANSCRIPT, "demo")}
-                    variant="secondary"
-                  >
-                    <Sparkles
-                      aria-hidden="true"
-                      className="size-4 text-primary"
-                    />
-                    Demo answer
-                  </Button>
                 </div>
               ) : null}
             </div>
@@ -634,7 +686,23 @@ function useAudioRecorder() {
     return body.transcript;
   }
 
-  return { start, stopAndTranscribe };
+  function pause() {
+    const mediaRecorder = recorderRef.current;
+    if (!mediaRecorder || mediaRecorder.state !== "recording") {
+      throw new Error("No active recording can be paused.");
+    }
+    mediaRecorder.pause();
+  }
+
+  function resume() {
+    const mediaRecorder = recorderRef.current;
+    if (!mediaRecorder || mediaRecorder.state !== "paused") {
+      throw new Error("No paused recording can be resumed.");
+    }
+    mediaRecorder.resume();
+  }
+
+  return { pause, resume, start, stopAndTranscribe };
 }
 
 async function requestExtraction(

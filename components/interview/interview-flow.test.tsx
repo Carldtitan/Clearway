@@ -35,9 +35,95 @@ describe("InterviewFlow", () => {
     await user.click(reviewButton);
     expect(screen.getByTestId("case-stage")).toHaveTextContent("review");
   });
+
+  it("pauses and resumes an active recording without losing the answer", async () => {
+    const user = userEvent.setup();
+    installMediaRecorder();
+    render(
+      <CaseProvider>
+        <InterviewFlow />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Record answer" }));
+    expect(await screen.findByText("Listening")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByText("Paused — your answer is still here")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Finish answer" }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Resume" }));
+    expect(screen.getByText("Listening")).toBeVisible();
+  });
+
+  it("moves focus to typing when microphone permission fails", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(window.navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn().mockRejectedValue(new Error("Denied")),
+      },
+    });
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    render(
+      <CaseProvider>
+        <InterviewFlow />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Record answer" }));
+
+    expect(
+      await screen.findByText(
+        "Microphone access did not work. Type your answer instead.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Your answer")).toHaveFocus();
+  });
 });
 
 function StageProbe() {
   const { applicantCase } = useApplicantCase();
   return <output data-testid="case-stage">{applicantCase.stage}</output>;
+}
+
+function installMediaRecorder() {
+  Object.defineProperty(window.navigator, "mediaDevices", {
+    configurable: true,
+    value: {
+      getUserMedia: vi.fn().mockResolvedValue({
+        getTracks: () => [{ stop: vi.fn() }],
+      }),
+    },
+  });
+  vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+}
+
+class FakeMediaRecorder {
+  static isTypeSupported() {
+    return true;
+  }
+
+  mimeType = "audio/webm";
+  state: RecordingState = "inactive";
+
+  addEventListener() {}
+
+  pause() {
+    this.state = "paused";
+  }
+
+  resume() {
+    this.state = "recording";
+  }
+
+  start() {
+    this.state = "recording";
+  }
+
+  stop() {
+    this.state = "inactive";
+  }
 }
