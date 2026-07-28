@@ -18,6 +18,7 @@ import { useApplicantCase } from "@/components/app/case-context";
 import { CheckFlow } from "@/components/check/check-flow";
 import { InterviewFlow } from "@/components/interview/interview-flow";
 import { PacketFlow } from "@/components/packet/packet-flow";
+import { RecordsTracker } from "@/components/records/records-tracker";
 import { ReviewFlow } from "@/components/review/review-flow";
 import type { ApplicantCase } from "@/lib/case/types";
 import { cn } from "@/lib/utils";
@@ -169,9 +170,7 @@ export function Workspace() {
               {applicantCase.stage === "interview" ? <InterviewFlow /> : null}
               {applicantCase.stage === "review" ? <ReviewFlow /> : null}
               {applicantCase.stage === "packet" ? <PacketFlow /> : null}
-              {applicantCase.stage === "records" ? (
-                <StagePlaceholder stage="records" />
-              ) : null}
+              {applicantCase.stage === "records" ? <RecordsTracker /> : null}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -211,38 +210,5 @@ export function Workspace() {
         </ol>
       </nav>
     </div>
-  );
-}
-
-function StagePlaceholder({ stage }: { stage: Exclude<Stage, "check"> }) {
-  const copy = {
-    interview: {
-      title: "Tell your story",
-      text: "Speak naturally or type. Your answers will become reviewable facts before any document is created.",
-    },
-    review: {
-      title: "Review what was captured",
-      text: "Confirm important dates, providers, medications, and work details in one place.",
-    },
-    packet: {
-      title: "Build the packet",
-      text: "One confirmed case will supply every form and continuation page.",
-    },
-    records: {
-      title: "Keep records moving",
-      text: "See the next useful action for every medical-record request.",
-    },
-  }[stage];
-
-  return (
-    <section className="mx-auto max-w-[46rem] pt-[clamp(2rem,10vh,7rem)]">
-      <p className="text-sm font-bold text-primary">Next stage</p>
-      <h1 className="mt-2 max-w-[13ch] text-5xl font-bold tracking-[-0.045em]">
-        {copy.title}
-      </h1>
-      <p className="mt-5 max-w-[36rem] text-lg leading-relaxed text-muted">
-        {copy.text}
-      </p>
-    </section>
   );
 }
