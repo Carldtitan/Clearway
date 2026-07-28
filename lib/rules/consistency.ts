@@ -27,7 +27,8 @@ export function validateCrossForm(
       kind: "missing",
       severity: "blocking",
       paths: ["eligibilityInput.allegedOnsetDate"],
-      message: "Confirm the date your conditions became severe enough to stop work.",
+      message:
+        "Confirm the date your conditions became severe enough to stop work.",
       affectedOutputs: ["ssa16", "ssa3368"],
     });
   }
@@ -41,7 +42,8 @@ export function validateCrossForm(
       kind: "conflict",
       severity: "blocking",
       paths: ["conditions[].allegedOnsetDate"],
-      message: "One or more condition dates need review before the forms are created.",
+      message:
+        "One or more condition dates need review before the forms are created.",
       affectedOutputs: ["ssa16", "ssa3368"],
     });
   }

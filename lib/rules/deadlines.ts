@@ -38,9 +38,7 @@ export function evaluateRecordRequest(
   if (request.status === "responded") {
     return {
       state: "responded",
-      deadline: request.requestedAt
-        ? deadlineFor(request, config)
-        : null,
+      deadline: request.requestedAt ? deadlineFor(request, config) : null,
       daysSinceRequest: request.requestedAt
         ? daysBetween(request.requestedAt, today)
         : null,
@@ -105,10 +103,7 @@ export function authorizationWarningDue(
   return parseDateOnly(today) >= warning;
 }
 
-function deadlineFor(
-  request: RecordRequest,
-  config: TrackerConfig,
-): string {
+function deadlineFor(request: RecordRequest, config: TrackerConfig): string {
   if (!request.requestedAt) {
     throw new Error("A request date is required to calculate a deadline.");
   }

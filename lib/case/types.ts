@@ -168,7 +168,13 @@ export interface AuthorizationState {
 
 export interface DocumentState {
   generatedRevision: number | null;
-  status: "not_started" | "ready" | "generating" | "complete" | "partial" | "failed";
+  status:
+    | "not_started"
+    | "ready"
+    | "generating"
+    | "complete"
+    | "partial"
+    | "failed";
 }
 
 export interface ApplicantCase {
@@ -223,7 +229,11 @@ export type AddEntityAction = {
 export type CaseAction =
   | { type: "SET_ELIGIBILITY_INPUT"; patch: Partial<EligibilityInput> }
   | { type: "ADD_INTERVIEW_TURN"; turn: InterviewTurn }
-  | { type: "UPDATE_INTERVIEW_TURN"; turnId: string; patch: Partial<InterviewTurn> }
+  | {
+      type: "UPDATE_INTERVIEW_TURN";
+      turnId: string;
+      patch: Partial<InterviewTurn>;
+    }
   | { type: "APPLY_CANDIDATE_PATCH"; patch: CandidatePatch }
   | { type: "CONFIRM_VALUE"; path: string }
   | { type: "EDIT_VALUE"; path: string; value: unknown }

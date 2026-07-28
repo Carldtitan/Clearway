@@ -8,10 +8,7 @@ import {
   evaluateRecordRequest,
 } from "@/lib/rules/deadlines";
 import { TRACKER_CONFIG } from "@/lib/rules/config";
-import {
-  partitionForForm,
-  validateCrossForm,
-} from "@/lib/rules/consistency";
+import { partitionForForm, validateCrossForm } from "@/lib/rules/consistency";
 
 describe("deterministic core", () => {
   it("Feature: ssdi-assistant, Property 15: checklist is exact and deterministic", () => {

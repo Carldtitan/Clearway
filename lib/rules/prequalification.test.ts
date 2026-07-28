@@ -95,9 +95,16 @@ describe("prequalification rules", () => {
     expect(requiredDurationCredits(42, SSA_RULES_2026)).toBe(20);
     expect(requiredDurationCredits(62, SSA_RULES_2026)).toBe(40);
 
-    expect(evaluateRecentWork({ ...baseInput, creditsLast3Years: 6 }, 23).status).toBe("looks_clear");
-    expect(evaluateRecentWork({ ...baseInput, workedYearsAfter21BeforeOnset: 3 }, 27).status).toBe("looks_clear");
-    expect(evaluateRecentWork({ ...baseInput, creditsLast10Years: 20 }, 47).status).toBe("looks_clear");
+    expect(
+      evaluateRecentWork({ ...baseInput, creditsLast3Years: 6 }, 23).status,
+    ).toBe("looks_clear");
+    expect(
+      evaluateRecentWork({ ...baseInput, workedYearsAfter21BeforeOnset: 3 }, 27)
+        .status,
+    ).toBe("looks_clear");
+    expect(
+      evaluateRecentWork({ ...baseInput, creditsLast10Years: 20 }, 47).status,
+    ).toBe("looks_clear");
   });
 
   it("Feature: ssdi-assistant, Property 7: ambiguous credits remain uncertain", () => {

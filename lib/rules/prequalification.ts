@@ -20,7 +20,11 @@ const MY_SSA_ACTION =
 function yearsBetween(dateOfBirth: string, onsetDate: string): number | null {
   const birth = new Date(`${dateOfBirth}T00:00:00Z`);
   const onset = new Date(`${onsetDate}T00:00:00Z`);
-  if (Number.isNaN(birth.valueOf()) || Number.isNaN(onset.valueOf()) || onset < birth) {
+  if (
+    Number.isNaN(birth.valueOf()) ||
+    Number.isNaN(onset.valueOf()) ||
+    onset < birth
+  ) {
     return null;
   }
   let age = onset.getUTCFullYear() - birth.getUTCFullYear();
@@ -51,8 +55,7 @@ export function requiredDurationCredits(
     const right = config.durationOfWork[index + 1];
     if (ageAtOnset >= left.ageAtOnset && ageAtOnset <= right.ageAtOnset) {
       const fraction =
-        (ageAtOnset - left.ageAtOnset) /
-        (right.ageAtOnset - left.ageAtOnset);
+        (ageAtOnset - left.ageAtOnset) / (right.ageAtOnset - left.ageAtOnset);
       const workYears =
         left.requiredWorkYears +
         fraction * (right.requiredWorkYears - left.requiredWorkYears);
@@ -71,7 +74,8 @@ export function evaluateSga(
       ruleId: "SGA-INPUT",
       status: "uncertain",
       title: "We need two more details",
-      reason: "Monthly earnings and statutory blindness determine which work limit applies.",
+      reason:
+        "Monthly earnings and statutory blindness determine which work limit applies.",
       nextAction: "Add the missing earnings details.",
     };
   }
@@ -84,7 +88,8 @@ export function evaluateSga(
         title: "Self-employment needs a closer look",
         reason:
           "SSA looks at business profit and applies additional work-activity tests—not gross revenue.",
-        nextAction: "Add average monthly business profit and review SSA's self-employment rules.",
+        nextAction:
+          "Add average monthly business profit and review SSA's self-employment rules.",
       };
     }
     return {
@@ -93,7 +98,8 @@ export function evaluateSga(
       title: "Self-employment needs review",
       reason:
         "SSA considers business profit and additional work-activity tests before deciding whether work is substantial.",
-      nextAction: "Keep recent tax and business-work records with the application.",
+      nextAction:
+        "Keep recent tax and business-work records with the application.",
     };
   }
 
@@ -111,7 +117,8 @@ export function evaluateSga(
     input.impairmentRelatedWorkExpensesUsd === null
       ? "disability-related work expenses"
       : null,
-    input.employerSubsidyPossible === true || input.employerSubsidyPossible === null
+    input.employerSubsidyPossible === true ||
+    input.employerSubsidyPossible === null
       ? "employer support or special conditions"
       : null,
     input.passiveIncomeIncluded === true || input.passiveIncomeIncluded === null
@@ -167,7 +174,8 @@ export function evaluateDurationOfWork(
       ruleId: "DURATION-INPUT",
       status: "uncertain",
       title: "Age at onset is unknown",
-      reason: "Date of birth and disability onset date are needed for the lifetime work estimate.",
+      reason:
+        "Date of birth and disability onset date are needed for the lifetime work estimate.",
       nextAction: "Confirm both dates.",
     };
   }
@@ -217,9 +225,7 @@ export function evaluateRecentWork(
   let reason: string;
   if (ageAtOnset < 24) {
     enough =
-      input.creditsLast3Years === null
-        ? null
-        : input.creditsLast3Years >= 6;
+      input.creditsLast3Years === null ? null : input.creditsLast3Years >= 6;
     reason = "The estimate uses 6 credits in the 3 years before onset.";
   } else if (ageAtOnset <= 30) {
     const requiredYears = (ageAtOnset - 21) / 2;
@@ -232,9 +238,7 @@ export function evaluateRecentWork(
     )} years between age 21 and onset.`;
   } else {
     enough =
-      input.creditsLast10Years === null
-        ? null
-        : input.creditsLast10Years >= 20;
+      input.creditsLast10Years === null ? null : input.creditsLast10Years >= 20;
     reason = "The estimate uses 20 credits in the 10 years before onset.";
   }
 

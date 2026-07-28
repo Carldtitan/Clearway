@@ -50,19 +50,25 @@ export function caseReducer(
     case "SET_RECORD_REQUEST":
       return changed(state, {
         ...state,
-        recordRequests: upsert(
-          state.recordRequests,
-          action.request,
-        ),
+        recordRequests: upsert(state.recordRequests, action.request),
       });
     case "EDIT_VALUE":
-      return changed(state, updateCanonicalAtPath(state, action.path, action.value, "typed"));
+      return changed(
+        state,
+        updateCanonicalAtPath(state, action.path, action.value, "typed"),
+      );
     case "CONFIRM_VALUE":
       return changed(state, confirmAtPath(state, action.path));
     case "APPLY_CANDIDATE_PATCH":
       return changed(
         state,
-        applyCandidateAtPath(state, action.patch.path, action.patch.value, action.patch.confidence, action.patch.turnId),
+        applyCandidateAtPath(
+          state,
+          action.patch.path,
+          action.patch.value,
+          action.patch.confidence,
+          action.patch.turnId,
+        ),
       );
     default:
       return state;
@@ -76,10 +82,7 @@ export function isPacketStale(state: ApplicantCase): boolean {
   );
 }
 
-function changed(
-  previous: ApplicantCase,
-  next: ApplicantCase,
-): ApplicantCase {
+function changed(previous: ApplicantCase, next: ApplicantCase): ApplicantCase {
   return {
     ...next,
     revision: previous.revision + 1,
@@ -128,10 +131,7 @@ function updateCanonicalAtPath(
   }));
 }
 
-function confirmAtPath(
-  state: ApplicantCase,
-  path: string,
-): ApplicantCase {
+function confirmAtPath(state: ApplicantCase, path: string): ApplicantCase {
   return mapPath(state, path, (current) => ({
     ...current,
     provenance: {
@@ -194,11 +194,7 @@ function mapPath(
   const key = parts.at(-1);
   if (!key) throw new Error(`Unsupported canonical path: ${path}`);
   const current = cursor[key];
-  if (
-    !current ||
-    typeof current !== "object" ||
-    !("provenance" in current)
-  ) {
+  if (!current || typeof current !== "object" || !("provenance" in current)) {
     throw new Error(`Path is not a canonical value: ${path}`);
   }
   cursor[key] = mapper(current as CanonicalValue<unknown>);
