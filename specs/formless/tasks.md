@@ -1,13 +1,13 @@
-# Implementation Plan: SSDI Assistant
+# Implementation Plan: Formless
 
 ## Overview
 
-This plan implements SSDI Assistant as a responsive Next.js product with a deterministic rules core, one in-memory canonical applicant case, equivalent voice and typed interview paths, schema-constrained extraction, applicant review, server-side Anvil document generation, and a seeded medical-record tracker. V1 is the mandatory hackathon build and is complete at Task 17. V2 starts only after the V1 checkpoint and adds a minimal encrypted tracker projection, passwordless return access, scheduled and consented reminders, an optional avatar, carefully constrained assisted calling, and privacy-safe production operations.
+This plan implements Formless as a responsive Next.js product with a deterministic rules core, one in-memory canonical applicant case, equivalent voice and typed interview paths, schema-constrained extraction, applicant review, server-side Anvil document generation, and a seeded medical-record tracker. V1 is the mandatory hackathon build and is complete at Task 17. V2 starts only after the V1 checkpoint and adds a minimal encrypted tracker projection, passwordless return access, scheduled and consented reminders, an optional avatar, carefully constrained assisted calling, and privacy-safe production operations.
 
 All implementation must follow:
 
-- `specs/ssdi-assistant/requirements.md` for observable behavior.
-- `specs/ssdi-assistant/design.md` for architecture, contracts, correctness properties, privacy boundaries, and design principles.
+- `specs/formless/requirements.md` for observable behavior.
+- `specs/formless/design.md` for architecture, contracts, correctness properties, privacy boundaries, and design principles.
 - `skills/impeccable/` for frontend shaping, implementation, adaptation, critique, audit, and polish.
 - The corrected root `REQUIREMENTS.md` when research documents disagree about SSA rules or form handling.
 

@@ -1,4 +1,4 @@
-# SSDI Assistant setup
+# Formless setup
 
 V1 is implemented as a Next.js application. It runs locally with in-memory case state and calls Anthropic, Deepgram, and Anvil only through server routes.
 

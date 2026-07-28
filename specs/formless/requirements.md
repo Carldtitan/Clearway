@@ -2,7 +2,7 @@
 
 ## Introduction
 
-SSDI Assistant is a responsive web application that helps a person with a disability prepare a Social Security Disability Insurance application and follow up on the medical evidence the claim depends on. It addresses three concrete failures in the existing process:
+Formless is a responsive web application that helps a person with a disability prepare a Social Security Disability Insurance application and follow up on the medical evidence the claim depends on. It addresses three concrete failures in the existing process:
 
 1. Applicants can spend months pursuing a claim that has an unresolved non-medical eligibility issue.
 2. The initial application requires the same facts to be expressed across several long, overlapping forms.
@@ -12,7 +12,7 @@ The V1 product is a mandatory hackathon build for the Alix "Agents of Administra
 
 V2 is a clearly separated production extension. It retains V1's case model and user journey while adding passwordless return access, encrypted tracker persistence, scheduled reminders, consented SMS, an optional avatar, carefully limited assisted calling, deletion controls, and privacy-safe operations.
 
-The primary user is an SSDI applicant who may be in pain, fatigued, anxious, unfamiliar with SSA terminology, have limited literacy, use assistive technology, or rely on a phone as their only computer. The secondary user is a family member, caseworker, shelter worker, or other helper completing the process alongside the applicant. Attorneys and appointed representatives are not product users; SSDI Assistant prepares materials but does not represent or file for anyone.
+The primary user is an SSDI applicant who may be in pain, fatigued, anxious, unfamiliar with SSA terminology, have limited literacy, use assistive technology, or rely on a phone as their only computer. The secondary user is a family member, caseworker, shelter worker, or other helper completing the process alongside the applicant. Attorneys and appointed representatives are not product users; Formless prepares materials but does not represent or file for anyone.
 
 The corrected root `REQUIREMENTS.md` is authoritative for public program rules, legal boundaries, form revisions, field counts, data classification, and V1/V2 scope. `latest_pathway.md` supplies research and rationale, while `RESOURCES.md` supplies source and form inventory.
 
@@ -34,12 +34,12 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 **User Story:** As an applicant, I want the product to speak the language I choose from its first sentence, so that I can understand the process without first navigating an English interface.
 
-1. WHEN a new session opens, THE SSDI_Assistant SHALL ask “Which language would you like to use?” before showing any other application question or action.
-2. THE SSDI_Assistant SHALL offer English, Español, and 中文（普通话） using their native labels.
-3. WHEN the applicant selects a language, THE SSDI_Assistant SHALL set the Conversation_Locale, request microphone access, and begin the spoken introduction without requiring a second start action.
+1. WHEN a new session opens, THE Formless SHALL ask “Which language would you like to use?” before showing any other application question or action.
+2. THE Formless SHALL offer English, Español, and 中文（普通话） using their native labels.
+3. WHEN the applicant selects a language, THE Formless SHALL set the Conversation_Locale, request microphone access, and begin the spoken introduction without requiring a second start action.
 4. THE spoken introduction SHALL identify the product, explain that it prepares an application and tracks records, name the documents and facts to have nearby, explain that missing items can be tracked, and ask the applicant to say when they are ready.
-5. IF microphone permission or speech output fails, THEN THE SSDI_Assistant SHALL preserve the selected language, show the introduction in that language, and offer “Type my answer.”
-6. THE SSDI_Assistant SHALL NOT silently change the Conversation_Locale to English after a provider failure.
+5. IF microphone permission or speech output fails, THEN THE Formless SHALL preserve the selected language, show the introduction in that language, and offer “Type my answer.”
+6. THE Formless SHALL NOT silently change the Conversation_Locale to English after a provider failure.
 
 #### Requirement 1B: Continuous application conversation
 
@@ -47,12 +47,12 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 1. THE user-facing workflow SHALL contain only Application, Documents, and Records.
 2. THE Application stage SHALL internally progress through `language`, `introduction`, `document_readiness`, `intake`, `issue_resolution`, `completion_review`, and `ready`.
-3. THE SSDI_Assistant SHALL keep prequalification questions and results inside the conversation and SHALL NOT expose a prequalification stage, score, pass label, or failure label.
-4. THE SSDI_Assistant SHALL confirm every consequential answer in the selected language before marking it confirmed.
-5. WHEN a required answer is deferred, THE SSDI_Assistant SHALL keep it incomplete, explain why it is needed, and return to it before packet generation.
-6. WHEN the applicant says “skip,” “disregard,” or “I don’t know,” THE SSDI_Assistant SHALL interpret the phrase as a command or explicit unknown and SHALL NOT save the phrase as a form value.
-7. THE SSDI_Assistant SHALL support repeat, explain, pause, continue, go back, correct, defer, status, change language, review, generate packet, download packet, open records, and mark received by voice.
-8. IF a command changes or removes confirmed information, THEN THE SSDI_Assistant SHALL identify the target and obtain confirmation before applying the command.
+3. THE Formless SHALL keep prequalification questions and results inside the conversation and SHALL NOT expose a prequalification stage, score, pass label, or failure label.
+4. THE Formless SHALL confirm every consequential answer in the selected language before marking it confirmed.
+5. WHEN a required answer is deferred, THE Formless SHALL keep it incomplete, explain why it is needed, and return to it before packet generation.
+6. WHEN the applicant says “skip,” “disregard,” or “I don’t know,” THE Formless SHALL interpret the phrase as a command or explicit unknown and SHALL NOT save the phrase as a form value.
+7. THE Formless SHALL support repeat, explain, pause, continue, go back, correct, defer, status, change language, review, generate packet, download packet, open records, and mark received by voice.
+8. IF a command changes or removes confirmed information, THEN THE Formless SHALL identify the target and obtain confirmation before applying the command.
 9. WHEN one applicant answer explicitly supplies facts for multiple active questions, THE Conversation_Orchestrator SHALL extract every supported fact and SHALL NOT ask a later question whose canonical target is already resolved.
 10. WHEN an ordinary answer can be reflected safely, THE Conversation_Orchestrator SHALL combine a brief declarative readback with the next relevant question and SHALL NOT require a separate yes/no turn.
 11. WHEN the applicant answers the next question without correcting the readback, THE Conversation_Orchestrator SHALL treat the prior readback as accepted; IF the applicant corrects it, THEN THE prior candidate SHALL remain unsaved and the correction SHALL be resolved before continuing.
@@ -74,17 +74,17 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 **User Story:** As an applicant speaking Spanish or Mandarin, I want to review the assistant’s understanding in my language while receiving valid English SSA forms.
 
-1. THE SSDI_Assistant SHALL support `en-US`, `es-US`, and `zh-CN` Conversation_Locales.
+1. THE Formless SHALL support `en-US`, `es-US`, and `zh-CN` Conversation_Locales.
 2. THE Speech_To_Text adapter SHALL use the configured locale for every recording and SHALL use an English medical model only for English.
 3. THE Text_To_Speech adapter SHALL use a locale-specific voice and multilingual synthesis model.
 4. THE Extraction_Adapter SHALL preserve the Original_Transcript and SHALL produce English canonical values for English SSA forms.
 5. THE Extraction_Adapter SHALL preserve legal names, addresses, identifiers, numbers, and dates without translating their semantic content.
-6. THE SSDI_Assistant SHALL confirm extracted meaning and ask follow-up questions in the active Conversation_Locale.
-7. WHEN the applicant changes language, THE SSDI_Assistant SHALL update speech input, speech output, visible copy, and the current question before accepting the next answer.
+6. THE Formless SHALL confirm extracted meaning and ask follow-up questions in the active Conversation_Locale.
+7. WHEN the applicant changes language, THE Formless SHALL update speech input, speech output, visible copy, and the current question before accepting the next answer.
 
 ## Glossary
 
-- **SSDI_Assistant**: The complete responsive web application, including the deterministic rules core, interview paths, review surface, document pipeline, record tracker, and V2 extensions.
+- **Formless**: The complete responsive web application, including the deterministic rules core, interview paths, review surface, document pipeline, record tracker, and V2 extensions.
 - **Applicant_Case**: The single in-memory V1 object containing applicant facts, eligibility inputs and results, conditions, providers, medications, work history, family information, checklist items, record requests, field provenance, review state, and workflow stage.
 - **Synthetic_Applicant**: The fictional persona used for all demonstration data, generated documents, screenshots, tests, and fallback behavior.
 - **Prequalification_Engine**: The deterministic component that evaluates possible SGA issues and estimates the two insured-status tests without deciding legal eligibility.
@@ -133,14 +133,14 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. THE SSDI_Assistant SHALL provide the stages Check, Interview, Review, Packet, and Records in that workflow order.
-2. THE SSDI_Assistant SHALL expose Check, Interview, Packet, and Records as the persistent mobile navigation destinations.
-3. THE SSDI_Assistant SHALL require Review after Interview and before first-time Document_Packet generation.
-4. WHEN the workspace is rendered at a viewport below 768 CSS pixels, THE SSDI_Assistant SHALL present one primary task at a time and SHALL place secondary transcript or fact content in a dismissible drawer.
-5. WHEN the workspace is rendered at a viewport of at least 1024 CSS pixels, THE SSDI_Assistant SHALL show a compact stage rail, a central task surface, and a contextual facts panel only where that panel supports Interview or Review.
-6. THE SSDI_Assistant SHALL provide no more than one visually dominant primary action in the active task region.
-7. THE SSDI_Assistant SHALL open directly into the product with actions to start the check or load the Synthetic_Applicant and SHALL NOT require a marketing landing page.
-8. IF the user returns to an earlier completed stage during the same session, THEN THE SSDI_Assistant SHALL preserve all later captured state and SHALL mark downstream derived outputs as needing revalidation when applicable.
+1. THE Formless SHALL provide the stages Check, Interview, Review, Packet, and Records in that workflow order.
+2. THE Formless SHALL expose Check, Interview, Packet, and Records as the persistent mobile navigation destinations.
+3. THE Formless SHALL require Review after Interview and before first-time Document_Packet generation.
+4. WHEN the workspace is rendered at a viewport below 768 CSS pixels, THE Formless SHALL present one primary task at a time and SHALL place secondary transcript or fact content in a dismissible drawer.
+5. WHEN the workspace is rendered at a viewport of at least 1024 CSS pixels, THE Formless SHALL show a compact stage rail, a central task surface, and a contextual facts panel only where that panel supports Interview or Review.
+6. THE Formless SHALL provide no more than one visually dominant primary action in the active task region.
+7. THE Formless SHALL open directly into the product with actions to start the check or load the Synthetic_Applicant and SHALL NOT require a marketing landing page.
+8. IF the user returns to an earlier completed stage during the same session, THEN THE Formless SHALL preserve all later captured state and SHALL mark downstream derived outputs as needing revalidation when applicable.
 
 ### Requirement 2: Deterministic Prequalification
 
@@ -162,7 +162,7 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 12. THE Prequalification_Engine SHALL NOT state a definitive failure of insured status from self-reported data alone.
 13. THE Prequalification_Engine SHALL attach a named rule ID and plain-language reason to every result.
 14. THE Prequalification_Engine SHALL use no generative AI.
-15. WHEN the applicant supplies all required answers, THE SSDI_Assistant SHALL display the complete prequalification result within 2 seconds and the flow SHALL be completable in under 2 minutes.
+15. WHEN the applicant supplies all required answers, THE Formless SHALL display the complete prequalification result within 2 seconds and the flow SHALL be completable in under 2 minutes.
 
 ### Requirement 3: Voice Interview
 
@@ -170,7 +170,7 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. WHEN the applicant starts Voice_Interview, THE SSDI_Assistant SHALL request microphone permission only in response to an explicit user action.
+1. WHEN the applicant starts Voice_Interview, THE Formless SHALL request microphone permission only in response to an explicit user action.
 2. THE Voice_Interview SHALL accept spoken input, provide spoken output, and display the complete text transcript alongside or within one action of the active question.
 3. THE Voice_Interview SHALL ask questions in plain language and SHALL NOT read SSA field names or form-item numbers as the primary question.
 4. THE Voice_Interview SHALL collect applicant identity, contact, citizenship, marital and child information, conditions, alleged onset date, work impact, providers, medications, education, and job history required by the four in-scope forms.
@@ -190,9 +190,9 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 1. WHEN the applicant names a provider, THE Provider_Exhaustion_Loop SHALL create a distinct candidate provider and SHALL ask whether the applicant saw anyone else.
 2. THE Provider_Exhaustion_Loop SHALL continue until the applicant explicitly answers that there are no additional providers.
-3. IF the applicant names a facility and practitioner that may represent the same source, THEN THE SSDI_Assistant SHALL present a possible-duplicate review choice and SHALL NOT merge them automatically.
-4. IF the applicant cannot recall a provider detail, THEN THE SSDI_Assistant SHALL retain the provider with that detail marked unconfirmed rather than dropping the provider.
-5. WHEN the applicant says a provider is the only source for a condition, THE SSDI_Assistant SHALL record the relationship but SHALL still ask whether any other source treated any condition.
+3. IF the applicant names a facility and practitioner that may represent the same source, THEN THE Formless SHALL present a possible-duplicate review choice and SHALL NOT merge them automatically.
+4. IF the applicant cannot recall a provider detail, THEN THE Formless SHALL retain the provider with that detail marked unconfirmed rather than dropping the provider.
+5. WHEN the applicant says a provider is the only source for a condition, THE Formless SHALL record the relationship but SHALL still ask whether any other source treated any condition.
 6. THE Provider_Exhaustion_Loop SHALL operate identically in Voice_Interview and Typed_Fallback.
 
 ### Requirement 5: Structured Extraction, Provenance, and Correction
@@ -204,12 +204,12 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 1. WHEN an Interview_Turn is complete, THE Extraction_Adapter SHALL request schema-constrained candidate updates rather than unstructured prose.
 2. THE Extraction_Adapter SHALL map candidate values to canonical field keys using the plain-English `/TU` labels in the checked-in field maps.
 3. THE Extraction_Adapter SHALL attach source turn, extraction confidence, and Field_Provenance to every candidate value.
-4. IF a candidate value is ambiguous, contradictory, or below the configured confidence threshold, THEN THE SSDI_Assistant SHALL mark it `unconfirmed` and SHALL request applicant review.
+4. IF a candidate value is ambiguous, contradictory, or below the configured confidence threshold, THEN THE Formless SHALL mark it `unconfirmed` and SHALL request applicant review.
 5. THE Extraction_Adapter SHALL NOT overwrite a confirmed value without creating a visible conflict.
-6. WHEN the applicant edits or confirms a value, THE SSDI_Assistant SHALL update the Applicant_Case immediately and SHALL record the value as `confirmed`.
-7. WHEN the applicant deletes a repeated entity such as a provider, medication, or job, THE SSDI_Assistant SHALL request confirmation and SHALL show which outputs will be affected.
-8. IF extraction fails for one Interview_Turn, THEN THE SSDI_Assistant SHALL preserve its transcript, offer retry or manual entry, and SHALL preserve all previously captured facts.
-9. THE SSDI_Assistant SHALL prevent Document_Packet generation while a required consequential field remains conflicting.
+6. WHEN the applicant edits or confirms a value, THE Formless SHALL update the Applicant_Case immediately and SHALL record the value as `confirmed`.
+7. WHEN the applicant deletes a repeated entity such as a provider, medication, or job, THE Formless SHALL request confirmation and SHALL show which outputs will be affected.
+8. IF extraction fails for one Interview_Turn, THEN THE Formless SHALL preserve its transcript, offer retry or manual entry, and SHALL preserve all previously captured facts.
+9. THE Formless SHALL prevent Document_Packet generation while a required consequential field remains conflicting.
 
 ### Requirement 6: Typed Fallback and Equivalent Paths
 
@@ -219,10 +219,10 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 1. THE Typed_Fallback SHALL be available before and during Voice_Interview.
 2. THE Typed_Fallback SHALL collect the same canonical facts as Voice_Interview and SHALL write to the same Applicant_Case.
-3. WHEN the applicant switches between voice and typing, THE SSDI_Assistant SHALL preserve all captured transcript and field state.
+3. WHEN the applicant switches between voice and typing, THE Formless SHALL preserve all captured transcript and field state.
 4. THE Typed_Fallback SHALL use plain-language grouped fields and SHALL NOT reproduce the visual structure of the SSA PDFs.
-5. WHEN Voice_Interview and Typed_Fallback receive semantically equivalent answers, THE SSDI_Assistant SHALL produce equivalent confirmed Applicant_Case values, checklist items, validation results, and document fields.
-6. IF microphone permission is denied or speech recognition fails, THEN THE SSDI_Assistant SHALL move focus to Typed_Fallback, explain the change in one sentence, and SHALL retain current progress.
+5. WHEN Voice_Interview and Typed_Fallback receive semantically equivalent answers, THE Formless SHALL produce equivalent confirmed Applicant_Case values, checklist items, validation results, and document fields.
+6. IF microphone permission is denied or speech recognition fails, THEN THE Formless SHALL move focus to Typed_Fallback, explain the change in one sentence, and SHALL retain current progress.
 
 ### Requirement 7: Canonical Applicant Case and Review
 
@@ -237,7 +237,7 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 5. THE Review_Surface SHALL prioritize missing, unconfirmed, and conflicting values before confirmed values.
 6. THE Review_Surface SHALL allow inline correction without returning to the original interview turn.
 7. WHEN a shared value changes, THE Cross_Form_Validator SHALL re-evaluate every dependent form field and derived output.
-8. THE SSDI_Assistant SHALL NOT ask the applicant to re-enter a confirmed value solely because another form requests the same fact.
+8. THE Formless SHALL NOT ask the applicant to re-enter a confirmed value solely because another form requests the same fact.
 9. WHEN all required conflicts are resolved, THE Review_Surface SHALL make Document_Packet generation available as its single primary action.
 
 ### Requirement 8: Personalized Supporting-Document Checklist
@@ -269,13 +269,13 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 3. THE Form_Field_Adapter for SSA-3368 SHALL use `fieldmaps/ssa-3368.json` and SHALL support all 426 mapped usable fields.
 4. THE Form_Field_Adapter for SSA-3369 SHALL use `fieldmaps/ssa-3369.json` and SHALL support all 377 user-fillable mapped fields.
 5. THE Form_Field_Adapter for SSA-827 SHALL use `fieldmaps/ssa-827.json` and SHALL support the applicable applicant-completed fields among its 23 mapped fields.
-6. THE SSDI_Assistant SHALL generate exactly one SSA-827 per case at the current adjudicative level by default.
-7. WHEN the applicant explicitly requests an additional blank SSA-827 original, THE SSDI_Assistant SHALL allow it without tying it to a provider.
+6. THE Formless SHALL generate exactly one SSA-827 per case at the current adjudicative level by default.
+7. WHEN the applicant explicitly requests an additional blank SSA-827 original, THE Formless SHALL allow it without tying it to a provider.
 8. THE SSA-827 output SHALL leave signature, date, parent-signature, witness-signature, witness-address, and `P1_SSAComplete_FLD` fields blank.
-9. THE SSDI_Assistant SHALL NOT use SSA-827 as the applicant's Right_Of_Access_Request to an individual provider.
+9. THE Formless SHALL NOT use SSA-827 as the applicant's Right_Of_Access_Request to an individual provider.
 10. ALL Anvil API calls SHALL execute server-side and secret values SHALL NOT be included in client bundles, browser requests, logs, or error messages.
-11. WHEN generation succeeds, THE SSDI_Assistant SHALL deliver the documents to the browser without retaining completed PDFs.
-12. THE SSDI_Assistant SHALL NOT claim that Anvil signatures are accepted by SSA for SSA-827.
+11. WHEN generation succeeds, THE Formless SHALL deliver the documents to the browser without retaining completed PDFs.
+12. THE Formless SHALL NOT claim that Anvil signatures are accepted by SSA for SSA-827.
 13. WHEN all dependencies respond normally, THE complete Document_Packet SHALL be generated within 10 seconds.
 
 ### Requirement 10: Cross-Form Consistency and Overflow
@@ -285,13 +285,13 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 #### Acceptance Criteria
 
 1. THE Cross_Form_Validator SHALL compare the alleged onset date used by SSA-16 and SSA-3368 before packet generation.
-2. IF the onset dates disagree, THEN THE SSDI_Assistant SHALL identify both values, explain that they must match, and SHALL block generation until the applicant resolves the conflict.
+2. IF the onset dates disagree, THEN THE Formless SHALL identify both values, explain that they must match, and SHALL block generation until the applicant resolves the conflict.
 3. THE Cross_Form_Validator SHALL check repeated applicant identity, marital, child, provider, medication, and work-history values for incompatible confirmed values.
 4. IF a repeatable collection exceeds the target form's capacity, THEN THE Form_Field_Adapter SHALL fill every available form slot and SHALL place every remaining item on a Continuation_Sheet.
-5. IF SSA-3368 contains more than 6 providers or 11 medications, THEN THE SSDI_Assistant SHALL generate a Continuation_Sheet and SHALL reference that sheet in Remarks.
+5. IF SSA-3368 contains more than 6 providers or 11 medications, THEN THE Formless SHALL generate a Continuation_Sheet and SHALL reference that sheet in Remarks.
 6. THE overflow process SHALL preserve source order, stable IDs, labels, relevant dates, and relationships.
 7. THE overflow process SHALL NOT silently truncate, merge, or reorder entries.
-8. WHEN a conflicting or overflow-affecting value changes, THE SSDI_Assistant SHALL invalidate the previous generated preview and SHALL require regeneration.
+8. WHEN a conflicting or overflow-affecting value changes, THE Formless SHALL invalidate the previous generated preview and SHALL require regeneration.
 
 ### Requirement 11: Remarks and Evidence Index
 
@@ -306,7 +306,7 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 5. THE Evidence_Index SHALL distinguish `not_requested`, `sent`, `responded`, and `silent` without relying only on color.
 6. WHEN no request has been sent to a provider, THE Evidence_Index SHALL state `Not requested` rather than inventing a date.
 7. THE Evidence_Index SHALL be generated from HTML to PDF and SHALL be included in the Document_Packet.
-8. WHEN tracker state changes, THE SSDI_Assistant SHALL mark Remarks and Evidence_Index as stale until regenerated.
+8. WHEN tracker state changes, THE Formless SHALL mark Remarks and Evidence_Index as stale until regenerated.
 
 ### Requirement 12: Seeded Record Tracker
 
@@ -332,17 +332,17 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. THE SSDI_Assistant SHALL conform to WCAG 2.2 Level AA for the supported V1 workflow.
-2. THE SSDI_Assistant SHALL support complete keyboard operation with visible focus and logical focus restoration.
-3. THE SSDI_Assistant SHALL expose semantic names, roles, states, errors, and progress announcements to screen readers.
-4. THE SSDI_Assistant SHALL use a minimum target size of 44 by 44 CSS pixels for primary touch controls.
-5. THE SSDI_Assistant SHALL NOT communicate status using color alone.
-6. THE SSDI_Assistant SHALL use user-facing language targeted at approximately a sixth-grade reading level.
-7. THE SSDI_Assistant SHALL limit persistent helper copy to the minimum required for the active decision and SHALL place longer definitions behind contextual disclosure.
-8. THE SSDI_Assistant SHALL honor `prefers-reduced-motion` and SHALL provide a non-motion equivalent for every transition.
-9. THE SSDI_Assistant SHALL remain operable at 320 CSS pixels wide and at 200 percent browser zoom without loss of content or action.
-10. THE SSDI_Assistant SHALL use the Impeccable_Skill for its visual system, interaction design, responsive adaptation, critique, audit, and polish.
-11. THE SSDI_Assistant SHALL avoid gradient text, decorative glass effects, colored side-stripe cards, repetitive card grids, decorative hero metrics, and unnecessary page-load choreography.
+1. THE Formless SHALL conform to WCAG 2.2 Level AA for the supported V1 workflow.
+2. THE Formless SHALL support complete keyboard operation with visible focus and logical focus restoration.
+3. THE Formless SHALL expose semantic names, roles, states, errors, and progress announcements to screen readers.
+4. THE Formless SHALL use a minimum target size of 44 by 44 CSS pixels for primary touch controls.
+5. THE Formless SHALL NOT communicate status using color alone.
+6. THE Formless SHALL use user-facing language targeted at approximately a sixth-grade reading level.
+7. THE Formless SHALL limit persistent helper copy to the minimum required for the active decision and SHALL place longer definitions behind contextual disclosure.
+8. THE Formless SHALL honor `prefers-reduced-motion` and SHALL provide a non-motion equivalent for every transition.
+9. THE Formless SHALL remain operable at 320 CSS pixels wide and at 200 percent browser zoom without loss of content or action.
+10. THE Formless SHALL use the Impeccable_Skill for its visual system, interaction design, responsive adaptation, critique, audit, and polish.
+11. THE Formless SHALL avoid gradient text, decorative glass effects, colored side-stripe cards, repetitive card grids, decorative hero metrics, and unnecessary page-load choreography.
 
 ### Requirement 14: V1 Privacy, Legal Boundaries, and Service Fallbacks
 
@@ -350,17 +350,17 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. THE V1 SSDI_Assistant SHALL store the Applicant_Case only in memory for the active browser session.
-2. THE V1 SSDI_Assistant SHALL NOT persist Tier_A_Data or Tier_B_Data to local storage, cookies, browser databases, server databases, analytics, logs, or error reporting.
-3. THE V1 SSDI_Assistant SHALL use only the Synthetic_Applicant for demonstrations, automated tests, screenshots, and recorded fallback media.
-4. THE SSDI_Assistant SHALL NOT file any form, contact SSA, charge a claim-related fee, provide individualized legal advice, or act as an appointed representative.
-5. IF speech recognition fails, THEN THE SSDI_Assistant SHALL preserve the Applicant_Case and SHALL offer Typed_Fallback.
-6. IF speech synthesis fails, THEN THE SSDI_Assistant SHALL preserve the Applicant_Case and SHALL continue with visible text.
-7. IF the Extraction_Adapter fails, THEN THE SSDI_Assistant SHALL preserve transcript and facts and SHALL offer retry or manual review.
-8. IF Anvil generation fails, THEN THE SSDI_Assistant SHALL preserve the Applicant_Case, identify document generation as unavailable, and SHALL offer retry without implying that a packet was produced.
-9. IF live voice or extraction is unavailable during the demonstration, THEN THE SSDI_Assistant SHALL allow the presenter to load Demo_Fallback data and SHALL identify the fallback state.
-10. THE SSDI_Assistant SHALL scrub Tier_A_Data and Tier_B_Data from client and server error messages.
-11. THE SSDI_Assistant SHALL display one concise statement explaining that it helps prepare an application but does not determine eligibility or file with SSA.
+1. THE V1 Formless SHALL store the Applicant_Case only in memory for the active browser session.
+2. THE V1 Formless SHALL NOT persist Tier_A_Data or Tier_B_Data to local storage, cookies, browser databases, server databases, analytics, logs, or error reporting.
+3. THE V1 Formless SHALL use only the Synthetic_Applicant for demonstrations, automated tests, screenshots, and recorded fallback media.
+4. THE Formless SHALL NOT file any form, contact SSA, charge a claim-related fee, provide individualized legal advice, or act as an appointed representative.
+5. IF speech recognition fails, THEN THE Formless SHALL preserve the Applicant_Case and SHALL offer Typed_Fallback.
+6. IF speech synthesis fails, THEN THE Formless SHALL preserve the Applicant_Case and SHALL continue with visible text.
+7. IF the Extraction_Adapter fails, THEN THE Formless SHALL preserve transcript and facts and SHALL offer retry or manual review.
+8. IF Anvil generation fails, THEN THE Formless SHALL preserve the Applicant_Case, identify document generation as unavailable, and SHALL offer retry without implying that a packet was produced.
+9. IF live voice or extraction is unavailable during the demonstration, THEN THE Formless SHALL allow the presenter to load Demo_Fallback data and SHALL identify the fallback state.
+10. THE Formless SHALL scrub Tier_A_Data and Tier_B_Data from client and server error messages.
+11. THE Formless SHALL display one concise statement explaining that it helps prepare an application but does not determine eligibility or file with SSA.
 
 ### Requirement 15: Three-Minute Working Demo
 
@@ -368,7 +368,7 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. THE SSDI_Assistant SHALL provide a rehearsed demo path that completes in no more than 3 minutes under normal configured service conditions.
+1. THE Formless SHALL provide a rehearsed demo path that completes in no more than 3 minutes under normal configured service conditions.
 2. THE demo path SHALL show the Synthetic_Applicant completing the Prequalification_Engine with a traceable `needs_review` or `uncertain` result.
 3. THE demo path SHALL show at least one live or deterministic spoken answer becoming visible transcript and candidate structured facts.
 4. THE demo path SHALL show the Provider_Exhaustion_Loop and at least one applicant correction.
@@ -386,14 +386,14 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. THE V2 SSDI_Assistant SHALL use passwordless Magic_Link access and SHALL NOT require a username and password.
-2. WHEN a Magic_Link is issued, THE SSDI_Assistant SHALL make it single-use, time-limited, and bound to the intended contact.
+1. THE V2 Formless SHALL use passwordless Magic_Link access and SHALL NOT require a username and password.
+2. WHEN a Magic_Link is issued, THE Formless SHALL make it single-use, time-limited, and bound to the intended contact.
 3. THE V2 persistent model SHALL store only Tier_B_Data required by Record_Tracker and reminders.
 4. THE V2 persistent model SHALL NOT store Social Security number, diagnoses, conditions, medications, raw interview transcript, or completed PDFs.
-5. THE V2 SSDI_Assistant SHALL encrypt provider display identity, provider contact, and applicant reminder contact at rest in addition to platform disk encryption.
-6. THE V2 SSDI_Assistant SHALL enforce row-level access so an authenticated magic-link session can access only its own opaque case.
-7. WHEN a user returns through a valid Magic_Link, THE SSDI_Assistant SHALL restore tracker state without reconstructing or requesting Tier_A_Data.
-8. IF a Magic_Link is expired or already used, THEN THE SSDI_Assistant SHALL reject it and SHALL offer issuance of a new link without exposing case existence.
+5. THE V2 Formless SHALL encrypt provider display identity, provider contact, and applicant reminder contact at rest in addition to platform disk encryption.
+6. THE V2 Formless SHALL enforce row-level access so an authenticated magic-link session can access only its own opaque case.
+7. WHEN a user returns through a valid Magic_Link, THE Formless SHALL restore tracker state without reconstructing or requesting Tier_A_Data.
+8. IF a Magic_Link is expired or already used, THEN THE Formless SHALL reject it and SHALL offer issuance of a new link without exposing case existence.
 
 ### Requirement 17: Retention, Deletion, and V2 Security
 
@@ -401,13 +401,13 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. THE V2 SSDI_Assistant SHALL display what Tier_B_Data is stored, why it is stored, and the active deletion rule before persistence is enabled.
-2. WHEN an applicant marks a case closed, THE SSDI_Assistant SHALL schedule automatic deletion 30 days later.
-3. WHEN a case has no authenticated activity for 18 months, THE SSDI_Assistant SHALL schedule automatic deletion.
-4. THE SSDI_Assistant SHALL notify the applicant before inactivity deletion when a valid consented reminder channel exists.
-5. THE SSDI_Assistant SHALL provide one action to delete the case immediately.
-6. WHEN deletion is confirmed, THE SSDI_Assistant SHALL delete encrypted case data, provider references, record requests, reminder events, consent records, and associated access sessions.
-7. THE SSDI_Assistant SHALL NOT place Tier_A_Data or Tier_B_Data in logs, analytics properties, traces, URLs, metric labels, or notification-provider metadata beyond the minimum delivery address and message content required.
+1. THE V2 Formless SHALL display what Tier_B_Data is stored, why it is stored, and the active deletion rule before persistence is enabled.
+2. WHEN an applicant marks a case closed, THE Formless SHALL schedule automatic deletion 30 days later.
+3. WHEN a case has no authenticated activity for 18 months, THE Formless SHALL schedule automatic deletion.
+4. THE Formless SHALL notify the applicant before inactivity deletion when a valid consented reminder channel exists.
+5. THE Formless SHALL provide one action to delete the case immediately.
+6. WHEN deletion is confirmed, THE Formless SHALL delete encrypted case data, provider references, record requests, reminder events, consent records, and associated access sessions.
+7. THE Formless SHALL NOT place Tier_A_Data or Tier_B_Data in logs, analytics properties, traces, URLs, metric labels, or notification-provider metadata beyond the minimum delivery address and message content required.
 8. THE production deployment SHALL use vendors and configurations approved for the applicable health-data obligations before real applicant data is accepted.
 
 ### Requirement 18: Reminder Scheduler and Consented SMS
@@ -419,12 +419,12 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 1. THE Reminder_Scheduler SHALL evaluate active record requests at least once per calendar day.
 2. THE Reminder_Scheduler SHALL create day-20, day-30, and 11-month authorization-expiry reminder events from deterministic date rules.
 3. THE Reminder_Scheduler SHALL make each event idempotent by case, request or authorization, reminder type, and due date.
-4. THE SSDI_Assistant SHALL continue to show on-screen reminders whether or not SMS is enabled.
-5. BEFORE sending any SMS reminder, THE SSDI_Assistant SHALL capture explicit SMS_Consent with timestamp and source.
-6. IF SMS_Consent is absent or revoked, THEN THE SSDI_Assistant SHALL NOT send an SMS.
+4. THE Formless SHALL continue to show on-screen reminders whether or not SMS is enabled.
+5. BEFORE sending any SMS reminder, THE Formless SHALL capture explicit SMS_Consent with timestamp and source.
+6. IF SMS_Consent is absent or revoked, THEN THE Formless SHALL NOT send an SMS.
 7. THE SMS reminder SHALL contain the provider display name, provider phone number, due state, and concise applicant script or a secure link to it.
-8. WHEN the applicant sends `STOP`, THE SSDI_Assistant SHALL revoke SMS_Consent, suppress future messages, and preserve on-screen reminders.
-9. IF Twilio delivery fails, THEN THE SSDI_Assistant SHALL record a non-sensitive delivery failure, SHALL NOT duplicate the event automatically, and SHALL preserve the on-screen reminder.
+8. WHEN the applicant sends `STOP`, THE Formless SHALL revoke SMS_Consent, suppress future messages, and preserve on-screen reminders.
+9. IF Twilio delivery fails, THEN THE Formless SHALL record a non-sensitive delivery failure, SHALL NOT duplicate the event automatically, and SHALL preserve the on-screen reminder.
 
 ### Requirement 19: Optional Avatar Layer
 
@@ -434,8 +434,8 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 1. THE Avatar_Layer SHALL be optional and disabled by default.
 2. THE Avatar_Layer SHALL consume the same speech output as Voice_Interview and SHALL NOT own interview logic or applicant facts.
-3. THE SSDI_Assistant SHALL preserve voice-only and text-only modes whenever the Avatar_Layer is enabled.
-4. IF avatar initialization, rendering, or synchronization fails, THEN THE SSDI_Assistant SHALL continue in voice-only or text-only mode without losing progress.
+3. THE Formless SHALL preserve voice-only and text-only modes whenever the Avatar_Layer is enabled.
+4. IF avatar initialization, rendering, or synchronization fails, THEN THE Formless SHALL continue in voice-only or text-only mode without losing progress.
 5. THE Avatar_Layer SHALL honor reduced-motion settings and SHALL provide a non-animated alternative.
 6. THE Avatar_Layer SHALL NOT be the sole carrier of instructions, status, errors, or confirmation.
 
@@ -447,12 +447,12 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 1. THE Assisted_Call SHALL remain behind a disabled-by-default feature flag until provider support and human-detection behavior have been validated.
 2. THE Assisted_Call SHALL support only providers with an explicitly configured phone-tree route.
-3. WHEN an Assisted_Call starts, THE SSDI_Assistant SHALL disclose what the system will do, that the applicant must speak for themselves, and how to end the call.
+3. WHEN an Assisted_Call starts, THE Formless SHALL disclose what the system will do, that the applicant must speak for themselves, and how to end the call.
 4. THE Assisted_Call SHALL use configured digits to navigate known menus and MAY wait on hold.
 5. WHEN likely conversational speech is detected, THE Assisted_Call SHALL bridge the applicant and SHALL bias toward joining early rather than leaving a human unanswered.
-6. THE SSDI_Assistant SHALL display the Right_Of_Access_Request script while the applicant is connected.
+6. THE Formless SHALL display the Right_Of_Access_Request script while the applicant is connected.
 7. THE Assisted_Call SHALL NOT claim to be the applicant, request records as an AI or third party, answer identity questions, make medical decisions, or speak after the applicant is bridged except for a neutral connection notice.
-8. IF the menu route is unknown, detection confidence is insufficient, or the call fails, THEN THE SSDI_Assistant SHALL stop automation, preserve tracker state, and SHALL offer the phone number and manual script.
+8. IF the menu route is unknown, detection confidence is insufficient, or the call fails, THEN THE Formless SHALL stop automation, preserve tracker state, and SHALL offer the phone number and manual script.
 
 ### Requirement 21: Privacy-Safe Production Operations
 
@@ -460,9 +460,9 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 #### Acceptance Criteria
 
-1. THE V2 SSDI_Assistant SHALL record aggregate counts and timing for page availability, reminder evaluation, message delivery state, and service errors without applicant, provider, or medical values.
-2. THE V2 SSDI_Assistant SHALL use opaque random identifiers in operational events and SHALL exclude those identifiers from public URLs.
-3. THE V2 SSDI_Assistant SHALL version annual SSA configuration with effective dates and SHALL retain the configuration version used for each deterministic decision without retaining its Tier_A inputs.
-4. WHEN a configured SSA value approaches its annual review date, THE SSDI_Assistant SHALL create an operator task and SHALL NOT silently roll forward a previous-year value.
-5. IF a production dependency is unavailable, THEN THE SSDI_Assistant SHALL expose aggregate dependency health while presenting the applicant with a plain next action and no internal diagnostic details.
-6. THE V2 SSDI_Assistant SHALL perform automated checks that reject attempted logging of known Tier_A and Tier_B field keys.
+1. THE V2 Formless SHALL record aggregate counts and timing for page availability, reminder evaluation, message delivery state, and service errors without applicant, provider, or medical values.
+2. THE V2 Formless SHALL use opaque random identifiers in operational events and SHALL exclude those identifiers from public URLs.
+3. THE V2 Formless SHALL version annual SSA configuration with effective dates and SHALL retain the configuration version used for each deterministic decision without retaining its Tier_A inputs.
+4. WHEN a configured SSA value approaches its annual review date, THE Formless SHALL create an operator task and SHALL NOT silently roll forward a previous-year value.
+5. IF a production dependency is unavailable, THEN THE Formless SHALL expose aggregate dependency health while presenting the applicant with a plain next action and no internal diagnostic details.
+6. THE V2 Formless SHALL perform automated checks that reject attempted logging of known Tier_A and Tier_B field keys.

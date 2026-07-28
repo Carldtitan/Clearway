@@ -83,7 +83,7 @@ export function Workspace() {
         <div className="flex items-center gap-3 px-2 py-1">
           <BrandMark />
           <div>
-            <p className="font-bold leading-none">SSDI Assistant</p>
+            <p className="font-bold leading-none">Formless</p>
             <p className="mt-1 text-xs text-muted">
               {localized(copy.productDescription, locale)}
             </p>
@@ -141,7 +141,7 @@ export function Workspace() {
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-10">
           <div className="flex items-center gap-2.5 lg:hidden">
             <BrandMark />
-            <p className="font-bold">SSDI Assistant</p>
+            <p className="font-bold">Formless</p>
           </div>
           <p className="hidden max-w-[48rem] text-sm text-muted lg:block">
             {localized(copy.productDescription, locale)}

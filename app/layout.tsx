@@ -12,8 +12,8 @@ const atkinson = Atkinson_Hyperlegible({
 
 export const metadata: Metadata = {
   title: {
-    default: "SSDI Assistant",
-    template: "%s · SSDI Assistant",
+    default: "Formless",
+    template: "%s · Formless",
   },
   description:
     "Prepare a clearer SSDI application and keep medical evidence moving.",

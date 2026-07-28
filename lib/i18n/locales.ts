@@ -66,11 +66,11 @@ export const copy = {
   },
   introduction: {
     "en-US":
-      "Hi, I’m SSDI Assistant. I’ll help you prepare your disability application and keep track of the records Social Security may need. Before we begin, please have your Social Security number, proof of birth, photo ID, work history, medical provider information, medication list, and bank details nearby. If you do not have something, tell me and I’ll keep track of it. Say “I’m ready” when you want to begin.",
+      "Hi, I’m Formless. I’ll help you prepare your disability application and keep track of the records Social Security may need. Before we begin, please have your Social Security number, proof of birth, photo ID, work history, medical provider information, medication list, and bank details nearby. If you do not have something, tell me and I’ll keep track of it. Say “I’m ready” when you want to begin.",
     "es-US":
-      "Hola, soy SSDI Assistant. Le ayudaré a preparar su solicitud por discapacidad y a llevar un control de los expedientes que el Seguro Social podría necesitar. Antes de comenzar, tenga cerca su número de Seguro Social, comprobante de nacimiento, identificación con foto, historial de trabajo, información de sus proveedores médicos, lista de medicamentos y datos bancarios. Si no tiene algo, dígamelo y lo anotaré para después. Diga “Estoy listo” o “Estoy lista” cuando quiera comenzar.",
+      "Hola, soy Formless. Le ayudaré a preparar su solicitud por discapacidad y a llevar un control de los expedientes que el Seguro Social podría necesitar. Antes de comenzar, tenga cerca su número de Seguro Social, comprobante de nacimiento, identificación con foto, historial de trabajo, información de sus proveedores médicos, lista de medicamentos y datos bancarios. Si no tiene algo, dígamelo y lo anotaré para después. Diga “Estoy listo” o “Estoy lista” cuando quiera comenzar.",
     "zh-CN":
-      "您好，我是 SSDI Assistant。我会帮助您准备残障福利申请，并记录社会保障局可能需要的材料。开始之前，请尽量准备好您的社会安全号码、出生证明、带照片的身份证件、工作经历、医疗机构信息、药物清单和银行资料。如果有材料暂时没有，请告诉我，我会记录下来。准备好后，请说“我准备好了”。",
+      "您好，我是 Formless。我会帮助您准备残障福利申请，并记录社会保障局可能需要的材料。开始之前，请尽量准备好您的社会安全号码、出生证明、带照片的身份证件、工作经历、医疗机构信息、药物清单和银行资料。如果有材料暂时没有，请告诉我，我会记录下来。准备好后，请说“我准备好了”。",
   },
   preparing: {
     "en-US": "What to have nearby",

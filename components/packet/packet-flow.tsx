@@ -393,7 +393,7 @@ export function PacketFlow() {
               {status === "complete" && downloadUrl ? (
                 <a
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[var(--radius-control)] bg-primary px-5 py-2.5 font-bold text-white shadow-[0_1px_0_oklch(0_0_0/0.12),0_8px_24px_oklch(0.46_0.145_356.8/0.16)] transition-colors hover:bg-primary-hover"
-                  download="ssdi-application-working-packet.pdf"
+                  download="formless-ssdi-application-packet.pdf"
                   href={downloadUrl}
                 >
                   <Download aria-hidden="true" className="size-4" />
@@ -427,7 +427,7 @@ export function PacketFlow() {
 
             <p className="mt-4 text-xs leading-relaxed text-muted">
               This is an applicant working copy. Review it, sign where shown,
-              and file it yourself. SSDI Assistant does not submit forms to
+              and file it yourself. Formless does not submit forms to
               SSA.
             </p>
             {!completion.ready ? (
@@ -648,7 +648,7 @@ function ChecklistPanel({
 function triggerDownload(url: string) {
   const link = document.createElement("a");
   link.href = url;
-  link.download = "ssdi-application-working-packet.pdf";
+  link.download = "formless-ssdi-application-packet.pdf";
   link.rel = "noopener";
   document.body.appendChild(link);
   link.click();

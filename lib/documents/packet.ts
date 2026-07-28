@@ -58,10 +58,10 @@ export async function generateDocumentPacket(
     const pages = await merged.copyPages(source, source.getPageIndices());
     pages.forEach((page) => merged.addPage(page));
   }
-  merged.setTitle("SSDI application working packet");
-  merged.setAuthor("SSDI Assistant");
+  merged.setTitle("Formless SSDI application packet");
+  merged.setAuthor("Formless");
   merged.setSubject("Applicant-prepared working copy");
-  merged.setCreator("SSDI Assistant with Anvil");
+  merged.setCreator("Formless with Anvil");
   const bytes = await merged.save({ useObjectStreams: false });
 
   return {
@@ -70,4 +70,3 @@ export async function generateDocumentPacket(
     pageCount: merged.getPageCount(),
   };
 }
-

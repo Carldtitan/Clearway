@@ -38,7 +38,7 @@ describe("prequalification rules", () => {
     });
   });
 
-  it("Feature: ssdi-assistant, Property 1: SGA is not an unconditional rejection", () => {
+  it("Feature: formless, Property 1: SGA is not an unconditional rejection", () => {
     fc.assert(
       fc.property(fc.integer({ min: 1691, max: 20_000 }), (earnings) => {
         const result = evaluateSga(
@@ -53,7 +53,7 @@ describe("prequalification rules", () => {
     );
   });
 
-  it("Feature: ssdi-assistant, Property 2: blindness selects the applicable SGA threshold", () => {
+  it("Feature: formless, Property 2: blindness selects the applicable SGA threshold", () => {
     expect(
       evaluateSga(
         { ...baseInput, monthlyEarningsUsd: 2000, statutorilyBlind: false },
@@ -68,7 +68,7 @@ describe("prequalification rules", () => {
     ).toBe("looks_clear");
   });
 
-  it("Feature: ssdi-assistant, Property 3: self-employment never compares gross revenue", () => {
+  it("Feature: formless, Property 3: self-employment never compares gross revenue", () => {
     const lowGross = evaluateSga(
       {
         ...baseInput,
@@ -91,7 +91,7 @@ describe("prequalification rules", () => {
     expect(highGross.status).toBe("needs_review");
   });
 
-  it("Feature: ssdi-assistant, Properties 4-6: duration and recent work follow independent age rules", () => {
+  it("Feature: formless, Properties 4-6: duration and recent work follow independent age rules", () => {
     expect(requiredDurationCredits(23, SSA_RULES_2026)).toBe(6);
     expect(requiredDurationCredits(34, SSA_RULES_2026)).toBe(12);
     expect(requiredDurationCredits(42, SSA_RULES_2026)).toBe(20);
@@ -109,7 +109,7 @@ describe("prequalification rules", () => {
     ).toBe("looks_clear");
   });
 
-  it("Feature: ssdi-assistant, Property 7: ambiguous credits remain uncertain", () => {
+  it("Feature: formless, Property 7: ambiguous credits remain uncertain", () => {
     const result = evaluatePrequalification(
       {
         ...baseInput,

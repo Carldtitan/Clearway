@@ -1,6 +1,6 @@
-# SSDI Assistant
+# Formless
 
-SSDI Assistant helps a person check common non-medical SSDI issues, tell their story once, review what the system understood, create a coherent application packet, and see the next medical-record follow-up action.
+Formless helps a person check common non-medical SSDI issues, tell their story once, review what the system understood, create a coherent application packet, and see the next medical-record follow-up action.
 
 The V1 demo is intentionally narrow and concrete:
 
@@ -41,7 +41,7 @@ The browser suite runs the complete synthetic case, downloads the live packet, c
 - `lib/forms/` — typed per-form adapters using checked-in field maps and verified Anvil aliases
 - `lib/documents/` — packet merge, continuation, Remarks, and evidence-index generation
 - `components/` — the restrained responsive Check → Interview → Review → Packet → Records workspace
-- `specs/ssdi-assistant/` — Kiro requirements, design, and implementation plan
+- `specs/formless/` — Kiro requirements, design, and implementation plan
 
 ## Boundaries
 

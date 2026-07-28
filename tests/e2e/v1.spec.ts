@@ -291,6 +291,7 @@ test("language is the first decision and removed workflow copy is absent", async
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
 
+  await expect(page).toHaveTitle("Formless");
   await expect(
     page.getByRole("heading", {
       name: "Which language would you like to use?",

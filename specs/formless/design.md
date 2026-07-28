@@ -2,7 +2,7 @@
 
 ## Overview
 
-SSDI Assistant is a responsive, task-oriented application that helps a person evaluate possible non-medical SSDI issues, describe their medical and work history in ordinary language, review what was captured, generate a consistent application packet, and follow up on medical records. Its design must work for applicants who are tired, in pain, anxious, phone-only, unfamiliar with government terminology, or using assistive technology.
+Formless is a responsive, task-oriented application that helps a person evaluate possible non-medical SSDI issues, describe their medical and work history in ordinary language, review what was captured, generate a consistent application packet, and follow up on medical records. Its design must work for applicants who are tired, in pain, anxious, phone-only, unfamiliar with government terminology, or using assistive technology.
 
 V1 is a complete hackathon product, not a visual prototype. It uses one synthetic case and in-memory React state, exercises real server-side Anvil integration when configured, and preserves deterministic demo fallbacks. V2 extends the same domain model and interfaces with encrypted tracker persistence, magic-link access, scheduled reminders, consented SMS, an optional avatar, and feature-flagged assisted calling.
 
@@ -1178,7 +1178,7 @@ A correctness property describes behavior that must hold across generated valid 
 ### Property-based tests
 
 - Use fast-check with a minimum of 100 generated cases for Properties 1–30 and 33 where inputs can be generated locally.
-- Tag each test as `Feature: ssdi-assistant, Property {number}: {property_text}`.
+- Tag each test as `Feature: formless, Property {number}: {property_text}`.
 - Generate onset ages around every schedule boundary, missing credit combinations, dates across month/year/leap boundaries, repeated collections across form capacity, conflicting patches, checklist fact combinations, and record states.
 - Persist each discovered counterexample as a regression example after correction.
 

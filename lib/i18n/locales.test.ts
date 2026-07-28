@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  copy,
   localeDefinition,
   SUPPORTED_LOCALES,
 } from "@/lib/i18n/locales";
@@ -18,5 +19,11 @@ describe("locale registry", () => {
     expect(localeDefinition("en-US").deepgramModel).toBe("nova-3-medical");
     expect(localeDefinition("es-US").deepgramModel).toBe("nova-3");
     expect(localeDefinition("zh-CN").deepgramModel).toBe("nova-3");
+  });
+
+  it("introduces the product as Formless in every supported language", () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(copy.introduction[locale.id]).toContain("Formless");
+    }
   });
 });
