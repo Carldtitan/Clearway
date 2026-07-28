@@ -72,25 +72,77 @@ The primary scene is an applicant using a phone or ordinary laptop at a kitchen 
 ### Information architecture
 
 ```text
-/check
-  Prequalification questions -> traceable result
+Application
+  Language -> preparation -> intake -> issue resolution -> final approval
 
-/interview
-  Current prompt -> speech or typing -> transcript -> candidate facts
+Documents
+  Checklist -> completeness -> generation -> preview/download
 
-/review
-  Missing/conflicting facts -> confirmation -> packet readiness
-
-/packet
-  Checklist -> form readiness -> generation -> preview/download
-
-/records
+Records
   Provider request state -> next action -> script/escalation
 ```
 
-Mobile persistent destinations are Check, Interview, Packet, and Records. Review is a required workflow transition opened from Interview and returned to whenever packet-affecting facts become stale. It is not a fifth bottom-navigation item.
+Mobile and desktop persistent destinations are Application, Documents, and Records. Prequalification and review are internal Application phases and are never exposed as destinations, scores, or gates an applicant can optimize answers against.
 
-Desktop adds a 208–232px stage rail and, on Interview and Review only, a 288–336px contextual facts panel. The central task column remains between 560px and 760px where possible. At tablet widths the facts panel becomes a drawer; below 768px the rail becomes bottom navigation.
+Desktop adds a 208–232px stage rail and a 288–336px contextual facts panel only after intake begins. The central task column remains between 560px and 760px where possible. At tablet widths the facts panel becomes a drawer; below 768px the rail becomes bottom navigation.
+
+### Voice-guided application architecture
+
+The first rendered decision is a native-language choice. Selection is also the browser user activation used to unlock microphone and audio output; there is no second start button. The application then uses a single `GuidedApplication` orchestrator backed by the canonical reducer.
+
+```text
+LanguageSelection
+  -> Introduction
+  -> DocumentReadiness
+  -> QuestionRegistry[current]
+  -> CommandParser
+      -> command handler
+      -> locale-aware extraction
+  -> spoken confirmation
+  -> CompletionEngine
+      -> next question
+      -> issue resolution
+      -> final approval
+  -> Documents
+  -> Records
+```
+
+The voice controller persists across the three user-facing stages. Its public methods accept the active locale and never silently fall back to a different language. Exact command parsing runs before LLM extraction so navigation speech cannot become form content.
+
+```ts
+type SupportedLocale = "en-US" | "es-US" | "zh-CN";
+type ApplicationPhase =
+  | "language"
+  | "introduction"
+  | "document_readiness"
+  | "intake"
+  | "issue_resolution"
+  | "completion_review"
+  | "ready";
+
+type VoiceIntent = "answer" | "command" | "answer_and_command";
+type VoiceCommand =
+  | "repeat"
+  | "explain"
+  | "pause"
+  | "continue"
+  | "go_back"
+  | "correct"
+  | "defer"
+  | "status"
+  | "change_language"
+  | "review"
+  | "generate_packet"
+  | "download_packet"
+  | "open_records"
+  | "mark_received";
+```
+
+The locale registry owns native labels, localized fixed interface copy, Deepgram model/language values, ElevenLabs voice environment keys, and browser speech locale. English uses `nova-3-medical` with `en-US`; Spanish and Mandarin use general `nova-3` with `es` and `zh-CN`.
+
+The Question Registry is pure data. Each entry declares requirement level, condition, whether unknown is allowed, whether unresolved state blocks packet generation, canonical targets, and localized prompt, confirmation, and explanation. The Completion Engine consumes the same registry on the client and packet server. It returns stable issue IDs, labels in the active locale, paths, and severity.
+
+Original-language transcripts remain attached to each turn. English canonical values feed the checked-in SSA form adapters. Names, addresses, identifiers, numbers, and dates are preserved exactly; narrative values may be translated to English only after the meaning is confirmed in the active language.
 
 ### Visual system
 
@@ -1220,4 +1272,3 @@ V2 is additive:
 - Every V2 adapter has a disabled state that preserves the V1 path.
 
 This separation allows V1 to remain demonstrable and useful even when all V2 services are absent.
-

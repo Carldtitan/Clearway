@@ -23,6 +23,42 @@ Tasks are organized so one person can execute them in order or multiple contribu
 
 The domain layer owns public contracts. Feature and integration work must consume those contracts rather than redefining local variants.
 
+## V1 Voice-Guided Overhaul
+
+- [ ] A. Replace the exposed five-stage workflow
+  - [ ] A.1 Add `SupportedLocale`, `ApplicationPhase`, transcript-locale, deferred-item, and document-readiness contracts to ApplicantCase.
+  - [ ] A.2 Replace visible Check, Interview, Review, and Packet destinations with Application, Documents, and Records.
+  - [ ] A.3 Build one `GuidedApplication` orchestrator for introduction, readiness, intake, issue resolution, final approval, and handoff to Documents.
+  - _Requirements: 1A, 1B, 1D_
+
+- [ ] B. Add deterministic conversation safety
+  - [ ] B.1 Create the localized Question Registry with required, conditional, optional, unknown, form-impact, and blocker metadata.
+  - [ ] B.2 Create the shared client/server Completion Engine and block incomplete packet generation.
+  - [ ] B.3 Parse exact voice commands before extraction and require confirmation for consequential corrections or status changes.
+  - [ ] B.4 Treat skip, disregard, and unknown as dispositions or commands, never application values.
+  - _Requirements: 1B, 1C, 5, 7, 9_
+
+- [ ] C. Implement language-first voice
+  - [ ] C.1 Render English, Español, and 中文（普通话） as the first and only initial decision.
+  - [ ] C.2 Begin the localized spoken preparation introduction immediately after selection.
+  - [ ] C.3 Route every recording through the locale-specific Deepgram model and every response through the locale-specific ElevenLabs voice.
+  - [ ] C.4 Preserve original transcripts, extract English SSA values, and confirm meaning in the selected language.
+  - [ ] C.5 Support changing language mid-conversation without losing progress or silently returning to English.
+  - _Requirements: 1A, 1D, 3, 5, 14_
+
+- [ ] D. Extend voice control through outputs
+  - [ ] D.1 Support spoken generation and download in Documents.
+  - [ ] D.2 Support spoken status, provider selection, script reading, and confirmed received-state updates in Records.
+  - [ ] D.3 Preserve equivalent visible, keyboard, and screen-reader controls.
+  - _Requirements: 1B, 9, 12, 13_
+
+- [ ] E. Validate and ship the overhaul
+  - [ ] E.1 Add unit tests for locale selection, commands, requirements, completeness, translation boundaries, and document readiness.
+  - [ ] E.2 Add component and integration tests for the three localized introductions, required-answer behavior, commands, provider failures, and packet blocking.
+  - [ ] E.3 Add voice-controlled browser paths for all three locales, Documents, and Records.
+  - [ ] E.4 Run live Deepgram, ElevenLabs, Anvil, accessibility, responsive, build, and Impeccable quality checks.
+  - _Requirements: 1A–1D, 13–15_
+
 ## V1 Tasks — Mandatory Hackathon Build
 
 - [ ] 1. Reconcile source documents and initialize the project
@@ -913,4 +949,3 @@ The domain layer owns public contracts. Feature and integration work must consum
 - Every top-level task and subtask references the requirements it implements.
 - V2 may add storage and services but may not change the legal boundaries, canonical fact semantics, deterministic rule behavior, form mapping, or V1 fallback paths.
 - No screen is complete until its responsive, keyboard, screen-reader, reduced-motion, empty, loading, error, and stale states have been verified where applicable.
-

@@ -26,6 +26,56 @@ The corrected root `REQUIREMENTS.md` is authoritative for public program rules, 
 6. **Impeccable product design.** All frontend work follows `skills/impeccable/`. The interface is a responsive task workspace, not a marketing page, slideshow, phone-frame presentation, or generic card dashboard.
 7. **No dead ends.** Every service or validation failure preserves captured work and offers a next action.
 
+### V1 voice-guided workflow amendment
+
+This amendment replaces the earlier user-facing Check, Interview, Review, and Packet sequence. Prequalification and review remain deterministic internal phases, but the applicant sees only Application, Documents, and Records. The application is one continuous conversation, beginning with language selection and continuing through document preparation, intake, correction, completeness review, packet generation, download, and record follow-up.
+
+#### Requirement 1A: Language-first entry
+
+**User Story:** As an applicant, I want the product to speak the language I choose from its first sentence, so that I can understand the process without first navigating an English interface.
+
+1. WHEN a new session opens, THE SSDI_Assistant SHALL ask “Which language would you like to use?” before showing any other application question or action.
+2. THE SSDI_Assistant SHALL offer English, Español, and 中文（普通话） using their native labels.
+3. WHEN the applicant selects a language, THE SSDI_Assistant SHALL set the Conversation_Locale, request microphone access, and begin the spoken introduction without requiring a second start action.
+4. THE spoken introduction SHALL identify the product, explain that it prepares an application and tracks records, name the documents and facts to have nearby, explain that missing items can be tracked, and ask the applicant to say when they are ready.
+5. IF microphone permission or speech output fails, THEN THE SSDI_Assistant SHALL preserve the selected language, show the introduction in that language, and offer “Type my answer.”
+6. THE SSDI_Assistant SHALL NOT silently change the Conversation_Locale to English after a provider failure.
+
+#### Requirement 1B: Continuous application conversation
+
+**User Story:** As an applicant with limited mobility or difficulty using forms, I want one guided conversation that completes the workflow, so that I do not have to operate several separate form screens.
+
+1. THE user-facing workflow SHALL contain only Application, Documents, and Records.
+2. THE Application stage SHALL internally progress through `language`, `introduction`, `document_readiness`, `intake`, `issue_resolution`, `completion_review`, and `ready`.
+3. THE SSDI_Assistant SHALL keep prequalification questions and results inside the conversation and SHALL NOT expose a prequalification stage, score, pass label, or failure label.
+4. THE SSDI_Assistant SHALL confirm every consequential answer in the selected language before marking it confirmed.
+5. WHEN a required answer is deferred, THE SSDI_Assistant SHALL keep it incomplete, explain why it is needed, and return to it before packet generation.
+6. WHEN the applicant says “skip,” “disregard,” or “I don’t know,” THE SSDI_Assistant SHALL interpret the phrase as a command or explicit unknown and SHALL NOT save the phrase as a form value.
+7. THE SSDI_Assistant SHALL support repeat, explain, pause, continue, go back, correct, defer, status, change language, review, generate packet, download packet, open records, and mark received by voice.
+8. IF a command changes or removes confirmed information, THEN THE SSDI_Assistant SHALL identify the target and obtain confirmation before applying the command.
+
+#### Requirement 1C: Deterministic completion
+
+**User Story:** As an applicant, I want the assistant to prevent an incomplete packet without inventing answers, so that I can resolve what is actually missing.
+
+1. THE Question_Registry SHALL label each question required, conditional, or optional and SHALL identify its activation rule, unknown policy, affected canonical fields, affected forms, and packet-blocking status.
+2. THE Completion_Engine SHALL block packet generation while legal name, Social Security number, birth date, birthplace, citizenship or immigration response, mailing address, phone, current work and earnings response, alleged onset date, disabling condition and work effect, education response, marriage response, children response, provider exhaustion, five-year work-history completion, conflict resolution, or final applicant approval remains unresolved.
+3. WHEN the applicant explicitly reports no providers, medications, marriages, children, or applicable jobs, THE Completion_Engine SHALL accept the confirmed negative response rather than requiring a fabricated collection entry.
+4. WHEN email, alternate contact, or direct-deposit information is declined or deferred, THE Completion_Engine SHALL record the disposition and SHALL NOT invent a value.
+5. THE packet-generation server route SHALL run the same Completion_Engine used by the client and SHALL reject an incomplete Applicant_Case with machine-readable missing-item identifiers.
+
+#### Requirement 1D: Multilingual canonical values
+
+**User Story:** As an applicant speaking Spanish or Mandarin, I want to review the assistant’s understanding in my language while receiving valid English SSA forms.
+
+1. THE SSDI_Assistant SHALL support `en-US`, `es-US`, and `zh-CN` Conversation_Locales.
+2. THE Speech_To_Text adapter SHALL use the configured locale for every recording and SHALL use an English medical model only for English.
+3. THE Text_To_Speech adapter SHALL use a locale-specific voice and multilingual synthesis model.
+4. THE Extraction_Adapter SHALL preserve the Original_Transcript and SHALL produce English canonical values for English SSA forms.
+5. THE Extraction_Adapter SHALL preserve legal names, addresses, identifiers, numbers, and dates without translating their semantic content.
+6. THE SSDI_Assistant SHALL confirm extracted meaning and ask follow-up questions in the active Conversation_Locale.
+7. WHEN the applicant changes language, THE SSDI_Assistant SHALL update speech input, speech output, visible copy, and the current question before accepting the next answer.
+
 ## Glossary
 
 - **SSDI_Assistant**: The complete responsive web application, including the deterministic rules core, interview paths, review surface, document pipeline, record tracker, and V2 extensions.
@@ -60,6 +110,13 @@ The corrected root `REQUIREMENTS.md` is authoritative for public program rules, 
 - **SMS_Consent**: The V2 record of explicit applicant opt-in to reminder text messages, including timestamp, source, and revocation state.
 - **Avatar_Layer**: The optional V2 rendered-face presentation adapter synchronized to existing speech output.
 - **Assisted_Call**: The V2 Twilio flow that navigates a supported provider phone tree, waits on hold, and bridges the applicant to a human; the applicant speaks for themselves.
+- **Conversation_Locale**: One of `en-US`, `es-US`, or `zh-CN`, selected before the conversation begins and used by visible copy, speech recognition, speech synthesis, confirmations, and follow-up questions.
+- **Application_Phase**: The internal state of the continuous application conversation: `language`, `introduction`, `document_readiness`, `intake`, `issue_resolution`, `completion_review`, or `ready`.
+- **Question_Registry**: The deterministic list of required, conditional, and optional interview questions, including activation, unknown, completeness, localization, and field-mapping metadata.
+- **Completion_Engine**: The shared client/server rules that identify missing, deferred, unconfirmed, conflicting, or incomplete information and decide whether packet generation is allowed.
+- **Voice_Command**: A spoken navigation or correction instruction that is separated from application answers before extraction.
+- **Original_Transcript**: The applicant’s answer in the language in which it was spoken or typed, retained with the corresponding canonical English value and provenance.
+- **Document_Readiness**: The applicant-reported status of a preparation item: `ready`, `not_available`, `follow_up`, or `obtained`.
 
 ## V1 Requirements — Mandatory Hackathon Build
 
@@ -402,4 +459,3 @@ The corrected root `REQUIREMENTS.md` is authoritative for public program rules, 
 4. WHEN a configured SSA value approaches its annual review date, THE SSDI_Assistant SHALL create an operator task and SHALL NOT silently roll forward a previous-year value.
 5. IF a production dependency is unavailable, THEN THE SSDI_Assistant SHALL expose aggregate dependency health while presenting the applicant with a plain next action and no internal diagnostic details.
 6. THE V2 SSDI_Assistant SHALL perform automated checks that reject attempted logging of known Tier_A and Tier_B field keys.
-
