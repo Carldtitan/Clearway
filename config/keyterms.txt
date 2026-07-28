@@ -1,0 +1,117 @@
+# Deepgram keyterm prompting — max 100 terms per request.
+# Boosts recognition of drug and condition names that STT otherwise mangles.
+# One term per line. Lines starting with # are ignored.
+
+# ── Pain / anti-inflammatory ──
+gabapentin
+pregabalin
+duloxetine
+meloxicam
+naproxen
+celecoxib
+tramadol
+hydrocodone
+oxycodone
+cyclobenzaprine
+tizanidine
+baclofen
+diclofenac
+prednisone
+
+# ── Mental health ──
+sertraline
+fluoxetine
+escitalopram
+citalopram
+venlafaxine
+bupropion
+trazodone
+mirtazapine
+quetiapine
+aripiprazole
+risperidone
+lamotrigine
+lithium
+buspirone
+alprazolam
+clonazepam
+lorazepam
+hydroxyzine
+
+# ── Cardiovascular ──
+lisinopril
+losartan
+amlodipine
+metoprolol
+carvedilol
+atorvastatin
+rosuvastatin
+simvastatin
+furosemide
+hydrochlorothiazide
+clopidogrel
+apixaban
+rivaroxaban
+warfarin
+
+# ── Diabetes / endocrine ──
+metformin
+glipizide
+insulin glargine
+semaglutide
+empagliflozin
+levothyroxine
+
+# ── Neurological ──
+levetiracetam
+topiramate
+carbamazepine
+phenytoin
+sumatriptan
+ropinirole
+donepezil
+memantine
+
+# ── Respiratory ──
+albuterol
+fluticasone
+montelukast
+tiotropium
+budesonide
+
+# ── GI / other ──
+omeprazole
+pantoprazole
+famotidine
+ondansetron
+allopurinol
+hydroxychloroquine
+methotrexate
+adalimumab
+etanercept
+
+# ── Conditions ──
+lumbar radiculopathy
+cervical radiculopathy
+spinal stenosis
+degenerative disc disease
+fibromyalgia
+rheumatoid arthritis
+osteoarthritis
+neuropathy
+peripheral neuropathy
+chronic obstructive pulmonary disease
+congestive heart failure
+major depressive disorder
+generalized anxiety disorder
+bipolar disorder
+post-traumatic stress disorder
+schizophrenia
+traumatic brain injury
+multiple sclerosis
+epilepsy
+migraine
+sciatica
+carpal tunnel syndrome
+sleep apnea
+chronic fatigue syndrome
