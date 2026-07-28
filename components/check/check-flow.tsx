@@ -215,7 +215,12 @@ const resultLanguage: Record<
 };
 
 export function CheckFlow() {
-  const { applicantCase, dispatch, loadDemo } = useApplicantCase();
+  const {
+    applicantCase,
+    dispatch,
+    loadDemo,
+    setVoiceSessionActive,
+  } = useApplicantCase();
   const [screen, setScreen] = useState<CheckScreen>(
     applicantCase.eligibilityInput.monthlyEarningsUsd !== null
       ? "result"
@@ -245,6 +250,7 @@ export function CheckFlow() {
   const result = completedResult ?? contextResult;
 
   async function startVoiceCheck() {
+    setVoiceSessionActive(true);
     const runId = ++runIdRef.current;
     setScreen("conversation");
     setKeyboardMode(false);
@@ -263,6 +269,7 @@ export function CheckFlow() {
   }
 
   function startKeyboardCheck() {
+    setVoiceSessionActive(false);
     ++runIdRef.current;
     setScreen("conversation");
     setKeyboardMode(true);
@@ -429,6 +436,7 @@ export function CheckFlow() {
         {screen === "start" ? (
           <StartCheck
             onDemo={() => {
+              setVoiceSessionActive(false);
               loadDemo();
               setScreen("result");
             }}

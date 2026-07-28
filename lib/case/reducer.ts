@@ -77,6 +77,7 @@ export function caseReducer(
           action.patch.confidence,
           action.patch.turnId,
           action.patch.source,
+          action.patch.confirmed,
         ),
       );
     default:
@@ -158,6 +159,7 @@ function applyCandidateAtPath(
   confidence: number,
   turnId: string,
   source: "typed" | "voice" | "seed",
+  confirmed = false,
 ): ApplicantCase {
   return mapPath(state, path, (current) => {
     if (
@@ -177,7 +179,7 @@ function applyCandidateAtPath(
       value,
       provenance: {
         source,
-        state: "unconfirmed",
+        state: confirmed ? "confirmed" : "unconfirmed",
         confidence,
         turnId,
         capturedAt: new Date().toISOString(),

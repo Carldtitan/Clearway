@@ -116,6 +116,27 @@ describe("interview extraction boundary", () => {
     expect(applicantCase.providers[0].name.provenance.source).toBe("typed");
   });
 
+  it("marks a candidate confirmed only after an explicit turn confirmation", () => {
+    let applicantCase = createEmptyApplicantCase();
+    const dispatch = (action: CaseAction) => {
+      applicantCase = caseReducer(applicantCase, action);
+    };
+
+    applyInterviewExtraction(dispatch, extraction, "confirmed-turn", {
+      confirmed: true,
+      createId: (prefix) => `${prefix}-confirmed`,
+      source: "voice",
+    });
+
+    expect(applicantCase.applicant.legalName.provenance.state).toBe(
+      "confirmed",
+    );
+    expect(applicantCase.conditions[0].name.provenance.state).toBe(
+      "confirmed",
+    );
+    expect(applicantCase.providers[0].name.provenance.state).toBe("confirmed");
+  });
+
   it("maps spoken identity, education, family, and detailed work facts", () => {
     let applicantCase = createEmptyApplicantCase();
     const dispatch = (action: CaseAction) => {

@@ -7,6 +7,7 @@ import {
   useContext,
   useMemo,
   useReducer,
+  useState,
 } from "react";
 
 import { createEmptyApplicantCase } from "@/lib/case/empty";
@@ -18,6 +19,8 @@ interface CaseContextValue {
   applicantCase: ApplicantCase;
   dispatch: Dispatch<CaseAction>;
   loadDemo: () => void;
+  setVoiceSessionActive: (active: boolean) => void;
+  voiceSessionActive: boolean;
 }
 
 const CaseContext = createContext<CaseContextValue | null>(null);
@@ -34,6 +37,7 @@ export function CaseProvider({
     initialCase,
     (source) => (source ? structuredClone(source) : createEmptyApplicantCase()),
   );
+  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
 
   const value = useMemo(
     () => ({
@@ -44,8 +48,10 @@ export function CaseProvider({
           type: "LOAD_CASE",
           applicantCase: structuredClone(syntheticApplicant),
         }),
+      setVoiceSessionActive,
+      voiceSessionActive,
     }),
-    [applicantCase],
+    [applicantCase, voiceSessionActive],
   );
 
   return <CaseContext.Provider value={value}>{children}</CaseContext.Provider>;

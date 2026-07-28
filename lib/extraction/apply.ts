@@ -25,6 +25,7 @@ type EntityKind = Exclude<ExtractedFact["kind"], "scalar">;
 interface ApplyExtractionOptions {
   createId?: IdFactory;
   source?: CaptureSource;
+  confirmed?: boolean;
 }
 
 export function applyInterviewExtraction(
@@ -36,6 +37,7 @@ export function applyInterviewExtraction(
   const createId =
     options.createId ?? ((prefix) => `${prefix}-${crypto.randomUUID()}`);
   const source = options.source ?? "voice";
+  const confirmed = options.confirmed ?? false;
   extraction.facts
     .filter(
       (fact) =>
@@ -54,11 +56,24 @@ export function applyInterviewExtraction(
           evidenceText: fact.evidenceText,
           turnId,
           source,
+          confirmed,
         },
       });
     });
-  applyAddressScalars(dispatch, extraction.facts, turnId, source);
-  applyRepeatedScalars(dispatch, extraction.facts, turnId, source);
+  applyAddressScalars(
+    dispatch,
+    extraction.facts,
+    turnId,
+    source,
+    confirmed,
+  );
+  applyRepeatedScalars(
+    dispatch,
+    extraction.facts,
+    turnId,
+    source,
+    confirmed,
+  );
 
   const grouped = groupEntities(
     extraction.facts.filter(
@@ -72,42 +87,42 @@ export function applyInterviewExtraction(
         dispatch({
           type: "ADD_ENTITY",
           collection: "conditions",
-          entity: conditionFrom(facts, turnId, source, createId),
+          entity: conditionFrom(facts, turnId, source, createId, confirmed),
         });
         break;
       case "provider":
         dispatch({
           type: "ADD_ENTITY",
           collection: "providers",
-          entity: providerFrom(facts, turnId, source, createId),
+          entity: providerFrom(facts, turnId, source, createId, confirmed),
         });
         break;
       case "medication":
         dispatch({
           type: "ADD_ENTITY",
           collection: "medications",
-          entity: medicationFrom(facts, turnId, source, createId),
+          entity: medicationFrom(facts, turnId, source, createId, confirmed),
         });
         break;
       case "job":
         dispatch({
           type: "ADD_ENTITY",
           collection: "jobs",
-          entity: jobFrom(facts, turnId, source, createId),
+          entity: jobFrom(facts, turnId, source, createId, confirmed),
         });
         break;
       case "marriage":
         dispatch({
           type: "ADD_ENTITY",
           collection: "marriages",
-          entity: marriageFrom(facts, turnId, source, createId),
+          entity: marriageFrom(facts, turnId, source, createId, confirmed),
         });
         break;
       case "child":
         dispatch({
           type: "ADD_ENTITY",
           collection: "children",
-          entity: childFrom(facts, turnId, source, createId),
+          entity: childFrom(facts, turnId, source, createId, confirmed),
         });
         break;
     }
@@ -181,29 +196,17 @@ function conditionFrom(
   turnId: string,
   source: CaptureSource,
   createId: IdFactory,
+  confirmed: boolean,
 ): Condition {
   const confidence = lowestConfidence(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
   return {
     id: createId("condition"),
-    name: candidate(one(facts, "condition.name"), confidence, turnId, source),
-    allegedOnsetDate: candidate(
-      one(facts, "condition.allegedOnsetDate"),
-      confidence,
-      turnId,
-      source,
-    ),
-    symptoms: candidate(
-      many(facts, "condition.symptom"),
-      confidence,
-      turnId,
-      source,
-    ),
-    workEffects: candidate(
-      many(facts, "condition.workEffect"),
-      confidence,
-      turnId,
-      source,
-    ),
+    name: value(one(facts, "condition.name")),
+    allegedOnsetDate: value(one(facts, "condition.allegedOnsetDate")),
+    symptoms: value(many(facts, "condition.symptom")),
+    workEffects: value(many(facts, "condition.workEffect")),
   };
 }
 
@@ -212,44 +215,22 @@ function providerFrom(
   turnId: string,
   source: CaptureSource,
   createId: IdFactory,
+  confirmed: boolean,
 ): Provider {
   const confidence = lowestConfidence(facts);
   const address = providerAddress(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
   return {
     id: createId("provider"),
-    name: candidate(one(facts, "provider.name"), confidence, turnId, source),
-    facility: candidate(
-      one(facts, "provider.facility"),
-      confidence,
-      turnId,
-      source,
-    ),
-    specialty: candidate(
-      one(facts, "provider.specialty"),
-      confidence,
-      turnId,
-      source,
-    ),
-    address: candidate(address, confidence, turnId, source),
-    phone: candidate(one(facts, "provider.phone"), confidence, turnId, source),
-    firstTreatmentDate: candidate(
-      one(facts, "provider.firstTreatmentDate"),
-      confidence,
-      turnId,
-      source,
-    ),
-    lastTreatmentDate: candidate(
-      one(facts, "provider.lastTreatmentDate"),
-      confidence,
-      turnId,
-      source,
-    ),
-    nextAppointmentDate: candidate(
-      one(facts, "provider.nextAppointmentDate"),
-      confidence,
-      turnId,
-      source,
-    ),
+    name: value(one(facts, "provider.name")),
+    facility: value(one(facts, "provider.facility")),
+    specialty: value(one(facts, "provider.specialty")),
+    address: value(address),
+    phone: value(one(facts, "provider.phone")),
+    firstTreatmentDate: value(one(facts, "provider.firstTreatmentDate")),
+    lastTreatmentDate: value(one(facts, "provider.lastTreatmentDate")),
+    nextAppointmentDate: value(one(facts, "provider.nextAppointmentDate")),
     conditionIds: [],
   };
 }
@@ -259,41 +240,19 @@ function medicationFrom(
   turnId: string,
   source: CaptureSource,
   createId: IdFactory,
+  confirmed: boolean,
 ): Medication {
   const confidence = lowestConfidence(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
   return {
     id: createId("medication"),
-    name: candidate(one(facts, "medication.name"), confidence, turnId, source),
-    dosage: candidate(
-      one(facts, "medication.dosage"),
-      confidence,
-      turnId,
-      source,
-    ),
-    frequency: candidate(
-      one(facts, "medication.frequency"),
-      confidence,
-      turnId,
-      source,
-    ),
-    prescriberProviderId: candidate<string>(
-      null,
-      confidence,
-      turnId,
-      source,
-    ),
-    reason: candidate(
-      one(facts, "medication.reason"),
-      confidence,
-      turnId,
-      source,
-    ),
-    sideEffects: candidate(
-      many(facts, "medication.sideEffect"),
-      confidence,
-      turnId,
-      source,
-    ),
+    name: value(one(facts, "medication.name")),
+    dosage: value(one(facts, "medication.dosage")),
+    frequency: value(one(facts, "medication.frequency")),
+    prescriberProviderId: value<string>(null),
+    reason: value(one(facts, "medication.reason")),
+    sideEffects: value(many(facts, "medication.sideEffect")),
   };
 }
 
@@ -302,63 +261,26 @@ function jobFrom(
   turnId: string,
   source: CaptureSource,
   createId: IdFactory,
+  confirmed: boolean,
 ): Job {
   const confidence = lowestConfidence(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
   return {
     id: createId("job"),
-    employer: candidate(one(facts, "job.employer"), confidence, turnId, source),
-    title: candidate(one(facts, "job.title"), confidence, turnId, source),
-    startDate: candidate(
-      one(facts, "job.startDate"),
-      confidence,
-      turnId,
-      source,
-    ),
-    endDate: candidate(one(facts, "job.endDate"), confidence, turnId, source),
-    hoursPerDay: candidate(
-      numberValue(facts, "job.hoursPerDay"),
-      confidence,
-      turnId,
-      source,
-    ),
-    daysPerWeek: candidate(
-      numberValue(facts, "job.daysPerWeek"),
-      confidence,
-      turnId,
-      source,
-    ),
-    pay: candidate(numberValue(facts, "job.pay"), confidence, turnId, source),
-    duties: candidate(many(facts, "job.duty"), confidence, turnId, source),
-    physicalDemands: candidate(
-      physicalDemandsFrom(facts),
-      confidence,
-      turnId,
-      source,
-    ),
-    toolsAndMachines: candidate(
-      many(facts, "job.toolOrMachine"),
-      confidence,
-      turnId,
-      source,
-    ),
-    supervision: candidate(
-      one(facts, "job.supervision"),
-      confidence,
-      turnId,
-      source,
-    ),
-    writingAndReports: candidate(
-      one(facts, "job.writingAndReports"),
-      confidence,
-      turnId,
-      source,
-    ),
-    reasonEnded: candidate(
-      one(facts, "job.reasonEnded"),
-      confidence,
-      turnId,
-      source,
-    ),
+    employer: value(one(facts, "job.employer")),
+    title: value(one(facts, "job.title")),
+    startDate: value(one(facts, "job.startDate")),
+    endDate: value(one(facts, "job.endDate")),
+    hoursPerDay: value(numberValue(facts, "job.hoursPerDay")),
+    daysPerWeek: value(numberValue(facts, "job.daysPerWeek")),
+    pay: value(numberValue(facts, "job.pay")),
+    duties: value(many(facts, "job.duty")),
+    physicalDemands: value(physicalDemandsFrom(facts)),
+    toolsAndMachines: value(many(facts, "job.toolOrMachine")),
+    supervision: value(one(facts, "job.supervision")),
+    writingAndReports: value(one(facts, "job.writingAndReports")),
+    reasonEnded: value(one(facts, "job.reasonEnded")),
   };
 }
 
@@ -367,34 +289,17 @@ function marriageFrom(
   turnId: string,
   source: CaptureSource,
   createId: IdFactory,
+  confirmed: boolean,
 ): Marriage {
   const confidence = lowestConfidence(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
   return {
     id: createId("marriage"),
-    spouseName: candidate(
-      one(facts, "marriage.spouseName"),
-      confidence,
-      turnId,
-      source,
-    ),
-    startDate: candidate(
-      one(facts, "marriage.startDate"),
-      confidence,
-      turnId,
-      source,
-    ),
-    endDate: candidate(
-      one(facts, "marriage.endDate"),
-      confidence,
-      turnId,
-      source,
-    ),
-    endReason: candidate(
-      one(facts, "marriage.endReason"),
-      confidence,
-      turnId,
-      source,
-    ),
+    spouseName: value(one(facts, "marriage.spouseName")),
+    startDate: value(one(facts, "marriage.startDate")),
+    endDate: value(one(facts, "marriage.endDate")),
+    endReason: value(one(facts, "marriage.endReason")),
   };
 }
 
@@ -403,18 +308,16 @@ function childFrom(
   turnId: string,
   source: CaptureSource,
   createId: IdFactory,
+  confirmed: boolean,
 ): Child {
   const confidence = lowestConfidence(facts);
+  const value = <T>(candidateValue: T | null) =>
+    candidate(candidateValue, confidence, turnId, source, confirmed);
   return {
     id: createId("child"),
-    name: candidate(one(facts, "child.name"), confidence, turnId, source),
-    dateOfBirth: candidate(
-      one(facts, "child.dateOfBirth"),
-      confidence,
-      turnId,
-      source,
-    ),
-    ssn: candidate(one(facts, "child.ssn"), confidence, turnId, source),
+    name: value(one(facts, "child.name")),
+    dateOfBirth: value(one(facts, "child.dateOfBirth")),
+    ssn: value(one(facts, "child.ssn")),
   };
 }
 
@@ -526,6 +429,7 @@ function applyAddressScalars(
   facts: ExtractedFact[],
   turnId: string,
   source: CaptureSource,
+  confirmed: boolean,
 ) {
   const definitions: Array<{
     path: string;
@@ -590,6 +494,7 @@ function applyAddressScalars(
         evidenceText: addressFacts.map((fact) => fact.evidenceText).join(" "),
         turnId,
         source,
+        confirmed,
       },
     });
   });
@@ -600,6 +505,7 @@ function applyRepeatedScalars(
   facts: ExtractedFact[],
   turnId: string,
   source: CaptureSource,
+  confirmed: boolean,
 ) {
   const trainingFacts = facts.filter(
     (fact) => fact.kind === "scalar" && fact.field === "education.training",
@@ -614,6 +520,7 @@ function applyRepeatedScalars(
       evidenceText: trainingFacts.map((fact) => fact.evidenceText).join(" "),
       turnId,
       source,
+      confirmed,
     },
   });
 }
@@ -645,10 +552,11 @@ function candidate<T>(
   confidence: number,
   turnId: string,
   source: CaptureSource,
+  confirmed = false,
 ): CanonicalValue<T> {
   const provenance: Provenance = {
     source,
-    state: value === null ? "missing" : "unconfirmed",
+    state: value === null ? "missing" : confirmed ? "confirmed" : "unconfirmed",
     confidence,
     turnId,
     capturedAt: new Date().toISOString(),

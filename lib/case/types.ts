@@ -235,6 +235,7 @@ export interface CandidatePatch {
   evidenceText: string;
   turnId: string;
   source: CaptureSource;
+  confirmed?: boolean;
 }
 
 export type AddEntityAction = {

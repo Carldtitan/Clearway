@@ -14,7 +14,13 @@ import {
   Volume2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { type FormEvent, useMemo, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useApplicantCase } from "@/components/app/case-context";
 import { Button } from "@/components/ui/button";
@@ -136,7 +142,8 @@ const factLabels: Partial<
 };
 
 export function InterviewFlow() {
-  const { dispatch } = useApplicantCase();
+  const { dispatch, setVoiceSessionActive, voiceSessionActive } =
+    useApplicantCase();
   const [mode, setMode] = useState<InputMode>("voice");
   const [status, setStatus] = useState<InterviewStatus>("intro");
   const [topicIndex, setTopicIndex] = useState(0);
@@ -151,8 +158,19 @@ export function InterviewFlow() {
   const [error, setError] = useState<string | null>(null);
   const runIdRef = useRef(0);
   const voice = useVoiceTurn();
+  const autoStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!voiceSessionActive || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void startVoiceInterview();
+    // The voice session flag is intentionally the only automatic trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceSessionActive]);
 
   async function startVoiceInterview() {
+    autoStartedRef.current = true;
+    setVoiceSessionActive(true);
     const runId = ++runIdRef.current;
     setMode("voice");
     setStatus("asking");
@@ -173,6 +191,7 @@ export function InterviewFlow() {
   }
 
   function startTypedInterview() {
+    setVoiceSessionActive(false);
     ++runIdRef.current;
     setMode("typed");
     setStatus("asking");
@@ -324,6 +343,7 @@ export function InterviewFlow() {
 
   function commitPending(turn: PendingTurn) {
     applyInterviewExtraction(dispatch, turn.extraction, turn.turnId, {
+      confirmed: true,
       source:
         turn.source === "typed"
           ? "typed"
@@ -408,6 +428,7 @@ export function InterviewFlow() {
   }
 
   function loadDemoAnswer() {
+    setVoiceSessionActive(false);
     ++runIdRef.current;
     setMode("typed");
     setTopicIndex(topics.length - 1);
