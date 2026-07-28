@@ -113,10 +113,12 @@ export function applyInterviewExtraction(
     }
   });
 
-  dispatch({
-    type: "SET_PROVIDER_COLLECTION_COMPLETE",
-    complete: extraction.providerListStatus === "complete",
-  });
+  if (extraction.providerListStatus !== "unknown") {
+    dispatch({
+      type: "SET_PROVIDER_COLLECTION_COMPLETE",
+      complete: extraction.providerListStatus === "complete",
+    });
+  }
 }
 
 const scalarFields = new Set<ExtractedFact["field"]>([

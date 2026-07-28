@@ -4,42 +4,118 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  CircleAlert,
   Keyboard,
   Mic,
   Pause,
   Play,
-  RotateCcw,
   Sparkles,
   Square,
   Volume2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 
 import { useApplicantCase } from "@/components/app/case-context";
 import { Button } from "@/components/ui/button";
 import Orb from "@/components/visual/orb";
+import { useVoiceTurn } from "@/components/voice/use-voice-turn";
+import type { InterviewTurn } from "@/lib/case/types";
 import { applyInterviewExtraction } from "@/lib/extraction/apply";
 import { DEMO_EXTRACTION, DEMO_TRANSCRIPT } from "@/lib/extraction/demo";
 import type { InterviewExtraction } from "@/lib/extraction/schema";
-import type { InterviewTurn } from "@/lib/case/types";
+import { parseYesNo } from "@/lib/voice/answer-parsers";
 import { cn } from "@/lib/utils";
 
 type InputMode = "voice" | "typed";
 type InterviewStatus =
-  | "idle"
-  | "requesting"
-  | "recording"
-  | "paused"
-  | "transcribing"
+  | "intro"
+  | "asking"
   | "extracting"
+  | "confirming"
   | "ready"
   | "error";
 
-const INITIAL_PROMPT =
-  "How do your health problems affect your work—and who has treated you?";
+interface InterviewTopic {
+  id: string;
+  label: string;
+  prompt: string;
+}
 
-const factLabels: Record<string, string> = {
+interface PendingTurn {
+  extraction: InterviewExtraction;
+  prompt: string;
+  source: InterviewTurn["source"];
+  topicIndex: number;
+  transcript: string;
+  turnId: string;
+}
+
+const topics: InterviewTopic[] = [
+  {
+    id: "identity",
+    label: "About you",
+    prompt:
+      "Tell me your full legal name, any other names on your records, your Social Security number, date and place of birth, citizenship, and preferred language.",
+  },
+  {
+    id: "contact",
+    label: "Contact",
+    prompt:
+      "What is your full mailing address, phone number, and email address? Say each part slowly.",
+  },
+  {
+    id: "conditions",
+    label: "Health",
+    prompt:
+      "Name each physical or mental condition that limits you. For each one, tell me when it began, the symptoms, and exactly how it affects work.",
+  },
+  {
+    id: "providers",
+    label: "Care",
+    prompt:
+      "Tell me every doctor, clinic, hospital, therapist, or other place that treated any condition. Include the name, location, phone number, what they treated, and first and most recent visit if you know them. Finish by saying whether there are any others.",
+  },
+  {
+    id: "medications",
+    label: "Medicine",
+    prompt:
+      "Tell me every medicine you take. Include the dose, how often, who prescribed it, why you take it, and any side effects. Say none if you take no medicine.",
+  },
+  {
+    id: "education",
+    label: "Education",
+    prompt:
+      "What is the highest grade or college year you completed, when and where did you complete it, were you in special education, and have you had job training? Also tell me the written language you use most.",
+  },
+  {
+    id: "jobs",
+    label: "Work",
+    prompt:
+      "Tell me about every job you had in the five years before your condition stopped or limited your work. For each job include dates, pay, hours, duties, lifting, standing, walking, sitting, tools, supervision, reports, and why it ended.",
+  },
+  {
+    id: "family",
+    label: "Family",
+    prompt:
+      "Tell me about current or former marriages and any children. Include names, dates, and how a marriage ended. You may say you have none. Social Security numbers can be added only if you know them.",
+  },
+  {
+    id: "other",
+    label: "Final details",
+    prompt:
+      "Have you served in the military, worked during the last year, or earned money recently? Are your bank details available for direct deposit? Answer each part.",
+  },
+];
+
+const factLabels: Partial<
+  Record<InterviewExtraction["facts"][number]["field"], string>
+> = {
+  "applicant.legalName": "Legal name",
+  "applicant.ssn": "Social Security number",
+  "applicant.dateOfBirth": "Date of birth",
+  "applicant.phone": "Phone",
+  "applicant.email": "Email",
   "condition.name": "Condition",
   "condition.symptom": "Symptom",
   "condition.workEffect": "Work effect",
@@ -49,544 +125,665 @@ const factLabels: Record<string, string> = {
   "medication.name": "Medication",
   "medication.dosage": "Dose",
   "medication.frequency": "Frequency",
-  "medication.sideEffect": "Side effect",
+  "education.highestLevel": "Education",
+  "education.training": "Training",
   "job.employer": "Employer",
-  "job.title": "Last job",
+  "job.title": "Job",
+  "job.duty": "Duty",
   "job.reasonEnded": "Why work ended",
+  "marriage.spouseName": "Spouse",
+  "child.name": "Child",
 };
 
 export function InterviewFlow() {
-  const { applicantCase, dispatch } = useApplicantCase();
+  const { dispatch } = useApplicantCase();
   const [mode, setMode] = useState<InputMode>("voice");
-  const [status, setStatus] = useState<InterviewStatus>("idle");
-  const [prompt, setPrompt] = useState(INITIAL_PROMPT);
+  const [status, setStatus] = useState<InterviewStatus>("intro");
+  const [topicIndex, setTopicIndex] = useState(0);
+  const [prompt, setPrompt] = useState(topics[0].prompt);
   const [typedAnswer, setTypedAnswer] = useState("");
-  const [transcript, setTranscript] = useState("");
-  const [extraction, setExtraction] = useState<InterviewExtraction | null>(
-    null,
-  );
+  const [pending, setPending] = useState<PendingTurn | null>(null);
+  const [lastExtraction, setLastExtraction] =
+    useState<InterviewExtraction | null>(null);
+  const [capturedFacts, setCapturedFacts] = useState<
+    InterviewExtraction["facts"]
+  >([]);
   const [error, setError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recorder = useAudioRecorder();
+  const runIdRef = useRef(0);
+  const voice = useVoiceTurn();
 
-  const statusCopy = {
-    idle: "Ready when you are",
-    requesting: "Waiting for microphone",
-    recording: "Listening",
-    paused: "Paused — your answer is still here",
-    transcribing: "Turning speech into text",
-    extracting: "Finding facts for your review",
-    ready:
-      extraction?.providerListStatus === "complete"
-        ? "Captured for review"
-        : "Ready for your next answer",
-    error: "Needs your attention",
-  }[status];
-
-  useEffect(() => {
-    if (mode === "typed") textareaRef.current?.focus();
-  }, [mode]);
-
-  async function beginVoice() {
+  async function startVoiceInterview() {
+    const runId = ++runIdRef.current;
+    setMode("voice");
+    setStatus("asking");
     setError(null);
-    setStatus("requesting");
     try {
-      await recorder.start();
-      setStatus("recording");
-    } catch {
-      setError("Microphone access did not work. Type your answer instead.");
+      await voice.activate();
+      await runVoiceTopic(0, topics[0].prompt, runId);
+    } catch (startError) {
+      if (runId !== runIdRef.current) return;
       setMode("typed");
       setStatus("error");
-    }
-  }
-
-  async function finishVoice() {
-    setStatus("transcribing");
-    try {
-      const nextTranscript = await recorder.stopAndTranscribe();
-      await submitTranscript(nextTranscript, "voice");
-    } catch (voiceError) {
       setError(
-        voiceError instanceof Error
-          ? voiceError.message
-          : "Voice transcription failed. Type your answer instead.",
+        startError instanceof Error
+          ? startError.message
+          : "The microphone did not start. Your progress is safe.",
       );
-      setMode("typed");
-      setStatus("error");
     }
   }
 
-  function pauseVoice() {
-    try {
-      recorder.pause();
-      setStatus("paused");
-    } catch {
-      setError("Recording could not pause. You can finish or type instead.");
-      setStatus("recording");
-    }
+  function startTypedInterview() {
+    ++runIdRef.current;
+    setMode("typed");
+    setStatus("asking");
+    setTopicIndex(0);
+    setPrompt(topics[0].prompt);
+    setError(null);
   }
 
-  function resumeVoice() {
-    try {
-      recorder.resume();
-      setStatus("recording");
-      setError(null);
-    } catch {
-      setError("Recording could not resume. You can finish or type instead.");
-      setStatus("paused");
-    }
-  }
-
-  async function submitTranscript(
-    nextTranscript: string,
-    source: InterviewTurn["source"],
+  async function runVoiceTopic(
+    nextTopicIndex: number,
+    nextPrompt: string,
+    runId: number,
   ) {
-    const cleanTranscript = nextTranscript.trim();
-    if (!cleanTranscript) {
-      setError("Add an answer before continuing.");
-      setStatus("error");
+    if (nextTopicIndex >= topics.length) {
+      await completeVoiceInterview(runId);
       return;
     }
+    setTopicIndex(nextTopicIndex);
+    setPrompt(nextPrompt);
+    setPending(null);
+    setStatus("asking");
+    setError(null);
+    try {
+      const transcript = await voice.ask(nextPrompt);
+      if (runId !== runIdRef.current) return;
+      const nextPending = await extractTurn(
+        transcript,
+        "voice",
+        nextTopicIndex,
+        nextPrompt,
+      );
+      if (!nextPending || runId !== runIdRef.current) return;
+      await confirmVoiceTurn(nextPending, runId);
+    } catch (turnError) {
+      if (runId !== runIdRef.current) return;
+      setStatus("error");
+      setError(
+        turnError instanceof Error
+          ? turnError.message
+          : "I could not complete that answer. Your transcript is still here.",
+      );
+    }
+  }
 
+  async function confirmVoiceTurn(nextPending: PendingTurn, runId: number) {
+    setStatus("confirming");
+    let clarification =
+      `I heard this: ${nextPending.extraction.summary} ` +
+      "Is that accurate? Say yes to save it, or no to answer again.";
+    for (;;) {
+      const confirmation = await voice.ask(clarification);
+      if (runId !== runIdRef.current) return;
+      const parsed = parseYesNo(confirmation);
+      if (!parsed.ok) {
+        clarification = "Please say yes if that summary is right, or no to change it.";
+        continue;
+      }
+      if (!parsed.value) {
+        dispatch({
+          type: "UPDATE_INTERVIEW_TURN",
+          turnId: nextPending.turnId,
+          patch: { status: "final" },
+        });
+        await voice.speak("Okay. I will not save those facts. Let us try again.");
+        if (runId === runIdRef.current) {
+          await runVoiceTopic(
+            nextPending.topicIndex,
+            nextPending.prompt,
+            runId,
+          );
+        }
+        return;
+      }
+      commitPending(nextPending);
+      const next = nextStep(nextPending);
+      if (next.topicIndex >= topics.length) {
+        await completeVoiceInterview(runId);
+      } else {
+        await runVoiceTopic(next.topicIndex, next.prompt, runId);
+      }
+      return;
+    }
+  }
+
+  async function extractTurn(
+    rawTranscript: string,
+    source: InterviewTurn["source"],
+    currentTopicIndex: number,
+    currentPrompt: string,
+  ): Promise<PendingTurn | null> {
+    const transcript = rawTranscript.trim();
+    if (!transcript) {
+      setStatus("error");
+      setError("Add an answer before continuing.");
+      return null;
+    }
     const turnId =
       source === "demo" ? "demo-interview-turn" : `turn-${crypto.randomUUID()}`;
-    setTranscript(cleanTranscript);
-    setStatus("extracting");
-    setError(null);
     dispatch({
       type: "ADD_INTERVIEW_TURN",
       turn: {
         id: turnId,
-        prompt,
-        transcript: cleanTranscript,
+        prompt: currentPrompt,
+        transcript,
         source,
         status: "extracting",
         createdAt: new Date().toISOString(),
       },
     });
-
+    setStatus("extracting");
+    setError(null);
     try {
-      const nextExtraction =
+      const extraction =
         source === "demo"
-          ? await demoExtraction()
-          : await requestExtraction(turnId, cleanTranscript);
-      setExtraction(nextExtraction);
-      if (
-        nextExtraction.providerListStatus !== "complete" &&
-        nextExtraction.followUpQuestion.trim()
-      ) {
-        setPrompt(nextExtraction.followUpQuestion.trim());
-      }
-      if (source === "typed") setTypedAnswer("");
-      if (applicantCase.mode !== "synthetic_demo") {
-        applyInterviewExtraction(dispatch, nextExtraction, turnId, {
-          source:
-            source === "typed" ? "typed" : source === "demo" ? "seed" : "voice",
-        });
-      }
-      dispatch({
-        type: "UPDATE_INTERVIEW_TURN",
+          ? DEMO_EXTRACTION
+          : await requestExtraction(
+              turnId,
+              topics[currentTopicIndex].id,
+              currentPrompt,
+              transcript,
+            );
+      const nextPending = {
+        extraction,
+        prompt: currentPrompt,
+        source,
+        topicIndex: currentTopicIndex,
+        transcript,
         turnId,
-        patch: { status: "extracted" },
-      });
-      setStatus("ready");
+      } satisfies PendingTurn;
+      setPending(nextPending);
+      setLastExtraction(extraction);
+      setStatus("confirming");
+      return nextPending;
     } catch (extractionError) {
       dispatch({
         type: "UPDATE_INTERVIEW_TURN",
         turnId,
         patch: { status: "failed" },
       });
+      setStatus("error");
       setError(
         extractionError instanceof Error
           ? extractionError.message
-          : "We kept your transcript. Retry or review it manually.",
+          : "Your transcript is safe, but fact extraction failed.",
       );
-      setStatus("error");
+      return null;
     }
   }
 
-  function speakPrompt() {
-    if (!("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(prompt);
-    utterance.rate = 0.94;
-    window.speechSynthesis.speak(utterance);
+  function commitPending(turn: PendingTurn) {
+    applyInterviewExtraction(dispatch, turn.extraction, turn.turnId, {
+      source:
+        turn.source === "typed"
+          ? "typed"
+          : turn.source === "demo"
+            ? "seed"
+            : "voice",
+    });
+    dispatch({
+      type: "UPDATE_INTERVIEW_TURN",
+      turnId: turn.turnId,
+      patch: { status: "extracted" },
+    });
+    setCapturedFacts((facts) => [...facts, ...turn.extraction.facts]);
+    setLastExtraction(turn.extraction);
+    setPending(null);
+    setTypedAnswer("");
   }
 
-  const hasResult =
-    status === "ready" && extraction?.providerListStatus === "complete";
+  function nextStep(turn: PendingTurn) {
+    const topic = topics[turn.topicIndex];
+    if (
+      topic.id === "providers" &&
+      turn.extraction.providerListStatus !== "complete"
+    ) {
+      return {
+        topicIndex: turn.topicIndex,
+        prompt:
+          turn.extraction.followUpQuestion.trim() ||
+          "Is there any other doctor, clinic, hospital, therapist, or place of care? Say no one else only when the list is complete.",
+      };
+    }
+    const nextTopicIndex = turn.topicIndex + 1;
+    return {
+      topicIndex: nextTopicIndex,
+      prompt: topics[nextTopicIndex]?.prompt ?? "",
+    };
+  }
+
+  async function completeVoiceInterview(runId: number) {
+    setStatus("ready");
+    try {
+      const answer = await voice.ask(
+        "The interview is complete. Your answers are ready for one final review before they reach the forms. Would you like to review them now?",
+      );
+      if (runId !== runIdRef.current) return;
+      const parsed = parseYesNo(answer);
+      if (parsed.ok && parsed.value) {
+        dispatch({ type: "SET_STAGE", stage: "review" });
+      }
+    } catch {
+      // The visible review action remains available.
+    }
+  }
+
+  function submitTypedAnswer(event: FormEvent) {
+    event.preventDefault();
+    void extractTurn(typedAnswer, "typed", topicIndex, prompt);
+  }
+
+  function confirmTypedTurn(confirmed: boolean) {
+    if (!pending) return;
+    if (!confirmed) {
+      dispatch({
+        type: "UPDATE_INTERVIEW_TURN",
+        turnId: pending.turnId,
+        patch: { status: "final" },
+      });
+      setPending(null);
+      setTypedAnswer("");
+      setStatus("asking");
+      return;
+    }
+    commitPending(pending);
+    const next = nextStep(pending);
+    if (next.topicIndex >= topics.length) {
+      setStatus("ready");
+      return;
+    }
+    setTopicIndex(next.topicIndex);
+    setPrompt(next.prompt);
+    setStatus("asking");
+  }
+
+  function loadDemoAnswer() {
+    ++runIdRef.current;
+    setMode("typed");
+    setTopicIndex(topics.length - 1);
+    void extractTurn(DEMO_TRANSCRIPT, "demo", 0, topics[0].prompt).then(
+      (nextPending) => {
+        if (!nextPending) return;
+        commitPending(nextPending);
+        setStatus("ready");
+      },
+    );
+  }
+
+  const shownFacts = useMemo(
+    () =>
+      (pending?.extraction.facts ?? capturedFacts)
+        .filter((fact) => factLabels[fact.field])
+        .slice(-20),
+    [capturedFacts, pending],
+  );
+  const progress =
+    status === "ready"
+      ? 100
+      : Math.round(((topicIndex + (status === "confirming" ? 0.5 : 0)) / topics.length) * 100);
 
   return (
     <div className="mx-auto grid w-full max-w-[76rem] gap-8 xl:grid-cols-[minmax(0,1fr)_19rem] xl:gap-12">
       <section className="min-w-0 pb-20">
-        <header className="pt-3 sm:pt-7">
-          <p className="text-sm font-bold text-primary">
-            Interview · Your story
-          </p>
-          <h1 className="mt-3 max-w-[18ch] text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
-            {prompt}
-          </h1>
-          <Button
-            className="-ml-3 mt-3"
-            onClick={speakPrompt}
-            size="small"
-            variant="quiet"
-          >
-            <Volume2 aria-hidden="true" className="size-4" />
-            Hear the question
-          </Button>
-        </header>
-
-        <div className="mt-4 grid gap-5 rounded-[var(--radius-surface)] border border-border bg-surface p-4 shadow-[0_20px_70px_oklch(0_0_0/0.055)] sm:p-6">
-          <div
-            aria-label="Choose how to answer"
-            className="grid grid-cols-2 rounded-[var(--radius-control)] bg-surface-subtle p-1"
-            role="group"
-          >
-            <ModeButton
-              active={mode === "voice"}
-              icon={Mic}
-              label="Speak"
-              onClick={() => setMode("voice")}
-            />
-            <ModeButton
-              active={mode === "typed"}
-              icon={Keyboard}
-              label="Type"
-              onClick={() => setMode("typed")}
-            />
-          </div>
-
-          {mode === "voice" ? (
-            <div className="grid place-items-center py-2 text-center">
-              <div className="relative size-48 sm:size-64">
-                <div
-                  className={cn(
-                    "absolute inset-[12%] rounded-full bg-primary/15 transition-transform duration-500",
-                    status === "recording" && "scale-110",
-                  )}
-                />
-                <Orb
-                  backgroundColor="#000000"
-                  forceHoverState={
-                    status === "recording" ||
-                    status === "transcribing" ||
-                    status === "extracting"
-                  }
-                  hoverIntensity={status === "recording" ? 0.55 : 0.2}
-                  hue={
-                    status === "ready"
-                      ? 110
-                      : status === "transcribing" || status === "extracting"
-                        ? 205
-                        : 330
-                  }
-                  rotateOnHover
-                />
-                <span className="pointer-events-none absolute inset-0 grid place-items-center">
-                  {status === "recording" || status === "paused" ? (
-                    <span className="grid size-14 place-items-center rounded-full bg-surface text-primary shadow-lg">
-                      {status === "recording" ? (
-                        <Mic aria-hidden="true" className="size-5" />
-                      ) : (
-                        <Pause aria-hidden="true" className="size-5" />
-                      )}
-                    </span>
-                  ) : null}
-                </span>
+        {status === "intro" ? (
+          <InterviewIntro
+            onDemo={loadDemoAnswer}
+            onKeyboard={startTypedInterview}
+            onStart={() => void startVoiceInterview()}
+          />
+        ) : (
+          <>
+            <header className="pt-3 sm:pt-7">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-bold text-primary">
+                  Interview · {status === "ready" ? "Complete" : topics[topicIndex].label}
+                </p>
+                <p className="text-sm font-bold text-muted">{progress}%</p>
               </div>
-
-              <p
-                aria-live="polite"
-                className="mt-1 flex items-center gap-2 font-bold"
+              <div
+                aria-hidden="true"
+                className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-subtle"
               >
-                <span
-                  className={cn(
-                    "size-2 rounded-full bg-muted",
-                    status === "recording" && "animate-pulse bg-primary",
-                    status === "ready" && "bg-success",
-                  )}
+                <motion.div
+                  animate={{ width: `${progress}%` }}
+                  className="h-full rounded-full bg-primary"
                 />
-                {statusCopy}
-              </p>
-
-              {status !== "ready" ||
-              extraction?.providerListStatus !== "complete" ? (
-                <div className="mt-5 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:gap-3">
-                  {status === "recording" || status === "paused" ? (
-                    <>
-                      <Button
-                        className="px-3"
-                        onClick={
-                          status === "recording" ? pauseVoice : resumeVoice
-                        }
-                      >
-                        {status === "recording" ? (
-                          <Pause aria-hidden="true" className="size-4" />
-                        ) : (
-                          <Play aria-hidden="true" className="size-4" />
-                        )}
-                        {status === "recording" ? "Pause" : "Resume"}
-                      </Button>
-                      <Button
-                        className="px-3"
-                        onClick={finishVoice}
-                        variant="secondary"
-                      >
-                        <Square aria-hidden="true" className="size-4" />
-                        Finish answer
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        className="px-3"
-                        disabled={[
-                          "requesting",
-                          "transcribing",
-                          "extracting",
-                        ].includes(status)}
-                        onClick={beginVoice}
-                      >
-                        <Mic aria-hidden="true" className="size-4" />
-                        Record answer
-                      </Button>
-                      <Button
-                        className="px-3"
-                        disabled={status === "extracting"}
-                        onClick={() =>
-                          submitTranscript(DEMO_TRANSCRIPT, "demo")
-                        }
-                        variant="secondary"
-                      >
-                        <Sparkles
-                          aria-hidden="true"
-                          className="size-4 text-primary"
-                        />
-                        Demo answer
-                      </Button>
-                    </>
-                  )}
-                </div>
+              </div>
+              <h1 className="mt-5 max-w-[19ch] text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
+                {status === "ready"
+                  ? "Your answers are ready to review."
+                  : status === "confirming" && pending
+                    ? `I heard: ${pending.extraction.summary}`
+                    : prompt}
+              </h1>
+              {status !== "ready" ? (
+                <p className="mt-4 max-w-[46rem] leading-relaxed text-muted">
+                  {status === "confirming"
+                    ? "Nothing is saved until you confirm this summary."
+                    : "Answer naturally. The assistant will read back what it understood before saving any facts."}
+                </p>
               ) : null}
-            </div>
-          ) : (
-            <div>
-              <label className="sr-only" htmlFor="typed-interview-answer">
-                Your answer
-              </label>
-              <textarea
-                className="min-h-52 w-full resize-y rounded-[var(--radius-control)] border border-border bg-background p-4 text-lg leading-relaxed placeholder:text-muted/65 focus:border-focus"
-                id="typed-interview-answer"
-                onChange={(event) => setTypedAnswer(event.currentTarget.value)}
-                placeholder="Tell us what happens on a difficult workday, then name every doctor, clinic, or hospital that has treated you."
-                ref={textareaRef}
-                value={typedAnswer}
-              />
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                <Button
-                  disabled={status === "extracting"}
-                  onClick={() => submitTranscript(DEMO_TRANSCRIPT, "demo")}
-                  variant="secondary"
-                >
-                  <Sparkles
-                    aria-hidden="true"
-                    className="size-4 text-primary"
+            </header>
+
+            {status !== "ready" ? (
+              <div className="mt-7 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-surface shadow-[0_20px_70px_oklch(0_0_0/0.055)]">
+                {mode === "voice" ? (
+                  <VoiceSurface
+                    level={voice.level}
+                    onFinish={voice.finishAnswer}
+                    onPause={voice.pause}
+                    onReplay={() =>
+                      void voice.speak(
+                        status === "confirming" && pending
+                          ? `I heard: ${pending.extraction.summary}. Is that accurate?`
+                          : prompt,
+                      )
+                    }
+                    onResume={voice.resume}
+                    state={voice.state}
                   />
-                  Use demo answer
-                </Button>
+                ) : (
+                  <TypedSurface
+                    answer={typedAnswer}
+                    confirming={status === "confirming" && Boolean(pending)}
+                    disabled={status === "extracting"}
+                    onAnswer={setTypedAnswer}
+                    onConfirm={confirmTypedTurn}
+                    onSubmit={submitTypedAnswer}
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="mt-7 flex flex-col gap-4 rounded-[var(--radius-surface)] border border-success/20 bg-success-soft p-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="flex items-center gap-3 font-bold text-success">
+                  <span className="grid size-9 place-items-center rounded-full bg-surface">
+                    <Check aria-hidden="true" className="size-5" />
+                  </span>
+                  You completed every interview section.
+                </p>
                 <Button
-                  disabled={status === "extracting"}
-                  onClick={() => submitTranscript(typedAnswer, "typed")}
+                  onClick={() =>
+                    dispatch({ type: "SET_STAGE", stage: "review" })
+                  }
                 >
-                  Find reviewable facts
+                  Review captured facts
                   <ArrowRight aria-hidden="true" className="size-4" />
                 </Button>
               </div>
-            </div>
-          )}
+            )}
 
-          {error ? (
-            <div
-              aria-live="assertive"
-              className="flex flex-col gap-3 rounded-[var(--radius-control)] bg-danger-soft p-4 text-danger sm:flex-row sm:items-center sm:justify-between"
-            >
-              <p className="text-sm font-bold">{error}</p>
-              {transcript ? (
+            {error || voice.error ? (
+              <div
+                className="mt-4 flex flex-col gap-3 rounded-[var(--radius-control)] bg-danger-soft p-4 text-danger sm:flex-row sm:items-center sm:justify-between"
+                role="alert"
+              >
+                <p className="flex items-center gap-2 text-sm font-bold">
+                  <CircleAlert aria-hidden="true" className="size-4" />
+                  {error || voice.error}
+                </p>
                 <Button
-                  onClick={() => submitTranscript(transcript, "typed")}
+                  onClick={() => {
+                    setMode("typed");
+                    setStatus("asking");
+                    setError(null);
+                  }}
                   size="small"
                   variant="secondary"
                 >
-                  <RotateCcw aria-hidden="true" className="size-4" />
-                  Retry
+                  <Keyboard aria-hidden="true" className="size-4" />
+                  Continue by keyboard
                 </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+              </div>
+            ) : null}
 
-        {applicantCase.interviewTurns.length ? (
-          <details
-            className="group mt-5 rounded-[var(--radius-control)] border border-border bg-surface"
-            open={status === "error"}
-          >
-            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 font-bold">
-              Transcript
-              <ChevronDown
-                aria-hidden="true"
-                className="size-4 transition-transform group-open:rotate-180"
-              />
-            </summary>
-            <ol className="grid gap-4 border-t border-border px-4 py-4">
-              {applicantCase.interviewTurns.map((turn) => (
-                <li className="leading-relaxed" key={turn.id}>
-                  <p className="text-xs font-bold text-primary">
-                    {turn.prompt}
-                  </p>
-                  <p className="mt-1 text-muted">{turn.transcript}</p>
-                </li>
-              ))}
-            </ol>
-          </details>
-        ) : null}
-
-        {status === "ready" &&
-        extraction?.providerListStatus !== "complete" ? (
-          <div
-            className="mt-5 rounded-[var(--radius-control)] bg-accent-soft p-4 text-sm leading-relaxed text-accent"
-            role="status"
-          >
-            Keep going until you have named every doctor, clinic, hospital, or
-            other place that treated any condition.
-          </div>
-        ) : null}
-
-        {hasResult ? (
-          <div className="mt-6 flex flex-col gap-3 rounded-[var(--radius-control)] bg-success-soft p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-center gap-2 font-bold text-success">
-              <Check aria-hidden="true" className="size-5" />
-              Your transcript is safe to review.
-            </p>
-            <Button
-              onClick={() => dispatch({ type: "SET_STAGE", stage: "review" })}
-            >
-              Review captured facts
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-        ) : null}
+            <TranscriptDisclosure />
+          </>
+        )}
       </section>
 
-      <FactsPanel extraction={extraction} status={status} />
+      <FactsPanel
+        extraction={lastExtraction}
+        facts={shownFacts}
+        pending={Boolean(pending)}
+        status={status}
+      />
     </div>
   );
 }
 
-function ModeButton({
-  active,
-  icon: Icon,
-  label,
-  onClick,
+function InterviewIntro({
+  onDemo,
+  onKeyboard,
+  onStart,
 }: {
-  active: boolean;
-  icon: typeof Mic;
-  label: string;
-  onClick: () => void;
+  onDemo: () => void;
+  onKeyboard: () => void;
+  onStart: () => void;
 }) {
   return (
-    <button
-      aria-pressed={active}
-      className={cn(
-        "flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg font-bold transition-colors",
-        active
-          ? "bg-surface text-primary shadow-[0_1px_3px_oklch(0_0_0/0.09)]"
-          : "text-muted hover:text-foreground",
+    <div className="pt-[clamp(1rem,6vh,5rem)]">
+      <p className="text-sm font-bold text-primary">Hands-free interview</p>
+      <h1 className="mt-4 max-w-[13ch] text-[clamp(2.65rem,7vw,5.3rem)] font-bold leading-[0.96] tracking-[-0.055em]">
+        Tell your story. We will build the forms.
+      </h1>
+      <p className="mt-6 max-w-[42rem] text-lg leading-relaxed text-muted sm:text-xl">
+        After one click, questions, listening, readbacks, and section changes
+        happen aloud. You can pause or correct anything.
+      </p>
+      <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+        <Button className="sm:min-w-52" onClick={onStart}>
+          <Mic aria-hidden="true" className="size-4" />
+          Start voice interview
+        </Button>
+        <Button onClick={onDemo} variant="secondary">
+          <Sparkles aria-hidden="true" className="size-4 text-primary" />
+          Demo answer
+        </Button>
+      </div>
+      <Button
+        className="-ml-3 mt-4"
+        onClick={onKeyboard}
+        size="small"
+        variant="quiet"
+      >
+        <Keyboard aria-hidden="true" className="size-4" />
+        Use one-question keyboard fallback
+      </Button>
+    </div>
+  );
+}
+
+function VoiceSurface({
+  level,
+  onFinish,
+  onPause,
+  onReplay,
+  onResume,
+  state,
+}: {
+  level: number;
+  onFinish: () => void;
+  onPause: () => void;
+  onReplay: () => void;
+  onResume: () => void;
+  state: ReturnType<typeof useVoiceTurn>["state"];
+}) {
+  const status = {
+    idle: "Preparing the next turn",
+    requesting: "Waiting for microphone permission",
+    speaking: "Speaking",
+    listening: "Listening",
+    paused: "Paused - your answer is still here",
+    processing: "Turning your answer into text",
+    error: "Needs your attention",
+  }[state];
+  return (
+    <div className="grid min-h-[25rem] place-items-center bg-surface-subtle/60 p-5 text-center">
+      <div>
+        <div
+          className="relative mx-auto size-52 sm:size-64"
+          style={{
+            transform: `scale(${1 + level * 0.08})`,
+            transition: "transform 100ms linear",
+          }}
+        >
+          <Orb
+            backgroundColor="#000000"
+            forceHoverState={["speaking", "listening", "processing"].includes(
+              state,
+            )}
+            hoverIntensity={state === "listening" ? 0.65 : 0.28}
+            hue={state === "listening" ? 330 : state === "processing" ? 205 : 15}
+            rotateOnHover
+          />
+        </div>
+        <p aria-live="polite" className="mt-3 flex items-center justify-center gap-2 font-bold">
+          <span
+            className={cn(
+              "size-2 rounded-full bg-muted",
+              state === "listening" && "animate-pulse bg-primary",
+              state === "speaking" && "bg-accent",
+            )}
+          />
+          {status}
+        </p>
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {state === "listening" ? (
+            <>
+              <Button onClick={onPause} size="small" variant="secondary">
+                <Pause aria-hidden="true" className="size-4" />
+                Pause
+              </Button>
+              <Button onClick={onFinish} size="small">
+                <Square aria-hidden="true" className="size-4" />
+                I&apos;m done
+              </Button>
+            </>
+          ) : null}
+          {state === "paused" ? (
+            <>
+              <Button onClick={onResume} size="small">
+                <Play aria-hidden="true" className="size-4" />
+                Resume
+              </Button>
+              <Button onClick={onFinish} size="small" variant="secondary">
+                <Square aria-hidden="true" className="size-4" />
+                I&apos;m done
+              </Button>
+            </>
+          ) : null}
+          <Button onClick={onReplay} size="small" variant="quiet">
+            <Volume2 aria-hidden="true" className="size-4" />
+            Replay
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TypedSurface({
+  answer,
+  confirming,
+  disabled,
+  onAnswer,
+  onConfirm,
+  onSubmit,
+}: {
+  answer: string;
+  confirming: boolean;
+  disabled: boolean;
+  onAnswer: (answer: string) => void;
+  onConfirm: (confirmed: boolean) => void;
+  onSubmit: (event: FormEvent) => void;
+}) {
+  return (
+    <form className="p-5 sm:p-6" onSubmit={onSubmit}>
+      {confirming ? (
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button onClick={() => onConfirm(true)}>
+            <Check aria-hidden="true" className="size-4" />
+            Yes, save these facts
+          </Button>
+          <Button onClick={() => onConfirm(false)} variant="secondary">
+            No, answer again
+          </Button>
+        </div>
+      ) : (
+        <>
+          <label className="sr-only" htmlFor="typed-interview-answer">
+            Answer the current question
+          </label>
+          <textarea
+            autoFocus
+            className="min-h-52 w-full resize-y rounded-[var(--radius-control)] border border-border bg-background p-4 text-lg leading-relaxed placeholder:text-muted/65 focus:border-focus"
+            disabled={disabled}
+            id="typed-interview-answer"
+            onChange={(event) => onAnswer(event.currentTarget.value)}
+            placeholder="Answer in your own words"
+            value={answer}
+          />
+          <Button className="mt-4" disabled={disabled} type="submit">
+            {disabled ? "Finding facts" : "Review what I said"}
+            <ArrowRight aria-hidden="true" className="size-4" />
+          </Button>
+        </>
       )}
-      onClick={onClick}
-      type="button"
-    >
-      <Icon aria-hidden="true" className="size-4" />
-      {label}
-    </button>
+    </form>
+  );
+}
+
+function TranscriptDisclosure() {
+  const { applicantCase } = useApplicantCase();
+  if (!applicantCase.interviewTurns.length) return null;
+  return (
+    <details className="group mt-5 rounded-[var(--radius-control)] border border-border bg-surface">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 font-bold">
+        Transcript
+        <ChevronDown
+          aria-hidden="true"
+          className="size-4 transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <ol className="grid gap-4 border-t border-border px-4 py-4">
+        {applicantCase.interviewTurns.map((turn) => (
+          <li className="leading-relaxed" key={turn.id}>
+            <p className="text-xs font-bold text-primary">{turn.prompt}</p>
+            <p className="mt-1 text-muted">{turn.transcript}</p>
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 
 function FactsPanel({
   extraction,
+  facts,
+  pending,
   status,
 }: {
   extraction: InterviewExtraction | null;
+  facts: InterviewExtraction["facts"];
+  pending: boolean;
   status: InterviewStatus;
 }) {
-  const visibleFacts = useMemo(
-    () =>
-      extraction?.facts.filter((fact) => factLabels[fact.field]).slice(0, 12) ??
-      [],
-    [extraction],
-  );
-
-  return (
+  const content = (
     <>
-      <aside
-        aria-label="Facts captured from this answer"
-        className="hidden min-w-0 xl:sticky xl:top-20 xl:block xl:h-[calc(100dvh-6rem)] xl:border-l xl:border-border xl:pl-7 xl:pt-3"
-      >
-        <FactsContent
-          extraction={extraction}
-          status={status}
-          visibleFacts={visibleFacts}
-        />
-      </aside>
-
-      <details className="group mb-28 rounded-[var(--radius-control)] border border-border bg-surface xl:hidden">
-        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between px-4 font-bold">
-          <span>
-            Captured facts
-            <span className="ml-2 text-xs text-muted">
-              {visibleFacts.length || "—"}
-            </span>
-          </span>
-          <ChevronDown
-            aria-hidden="true"
-            className="size-4 transition-transform group-open:rotate-180"
-          />
-        </summary>
-        <div className="border-t border-border p-4">
-          <FactsContent
-            extraction={extraction}
-            hideHeading
-            status={status}
-            visibleFacts={visibleFacts}
-          />
-        </div>
-      </details>
-    </>
-  );
-}
-
-function FactsContent({
-  extraction,
-  hideHeading = false,
-  status,
-  visibleFacts,
-}: {
-  extraction: InterviewExtraction | null;
-  hideHeading?: boolean;
-  status: InterviewStatus;
-  visibleFacts: InterviewExtraction["facts"];
-}) {
-  return (
-    <>
-      {!hideHeading ? (
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold">Captured facts</h2>
-          <span className="text-xs font-bold text-muted">
-            {visibleFacts.length || "—"}
-          </span>
-        </div>
-      ) : null}
-
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold">{pending ? "Waiting for you" : "Captured facts"}</h2>
+        <span className="text-xs font-bold text-muted">{facts.length || "—"}</span>
+      </div>
       {status === "extracting" ? (
         <div className="mt-5 grid gap-2" aria-label="Extracting facts">
           {[0, 1, 2, 3].map((item) => (
@@ -594,37 +791,26 @@ function FactsContent({
               animate={{ opacity: [0.35, 0.8, 0.35] }}
               className="h-14 rounded-[var(--radius-control)] bg-surface-subtle"
               key={item}
-              transition={{
-                duration: 1.2,
-                delay: item * 0.08,
-                repeat: Infinity,
-              }}
+              transition={{ duration: 1.2, delay: item * 0.08, repeat: Infinity }}
             />
           ))}
         </div>
       ) : null}
-
-      {status !== "extracting" && visibleFacts.length === 0 ? (
+      {status !== "extracting" && !facts.length ? (
         <p className="mt-4 text-sm leading-relaxed text-muted">
-          Facts appear here after your answer. Nothing reaches a form until you
-          review it.
+          Facts appear here after an answer. No fact enters the case before a
+          spoken or typed confirmation.
         </p>
       ) : null}
-
       <AnimatePresence>
-        {visibleFacts.length ? (
-          <motion.ul
-            animate={{ opacity: 1 }}
-            className="mt-4 grid gap-2"
-            initial={{ opacity: 0 }}
-          >
-            {visibleFacts.map((fact, index) => (
+        {facts.length ? (
+          <motion.ul className="mt-4 grid gap-2">
+            {facts.map((fact, index) => (
               <motion.li
                 animate={{ opacity: 1, x: 0 }}
                 className="rounded-[var(--radius-control)] border border-border bg-surface px-3.5 py-3"
                 initial={{ opacity: 0, x: 12 }}
                 key={`${fact.entityKey}-${fact.field}-${index}`}
-                transition={{ delay: Math.min(index * 0.055, 0.5) }}
               >
                 <p className="text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-primary">
                   {factLabels[fact.field]}
@@ -635,117 +821,51 @@ function FactsContent({
           </motion.ul>
         ) : null}
       </AnimatePresence>
-
       {extraction?.providerListStatus === "complete" ? (
         <p className="mt-4 flex items-center gap-2 text-sm font-bold text-success">
           <Check aria-hidden="true" className="size-4" />
           Provider list marked complete
         </p>
       ) : null}
+      {pending ? (
+        <p className="mt-4 rounded-[var(--radius-control)] bg-accent-soft p-3 text-sm font-bold text-accent">
+          These are not saved yet.
+        </p>
+      ) : null}
+    </>
+  );
+  return (
+    <>
+      <aside
+        aria-label="Facts captured from this answer"
+        className="hidden min-w-0 xl:sticky xl:top-20 xl:block xl:h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:border-l xl:border-border xl:pl-7 xl:pt-3"
+      >
+        {content}
+      </aside>
+      <details className="group mb-28 rounded-[var(--radius-control)] border border-border bg-surface xl:hidden">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between px-4 font-bold">
+          Captured facts
+          <ChevronDown
+            aria-hidden="true"
+            className="size-4 transition-transform group-open:rotate-180"
+          />
+        </summary>
+        <div className="border-t border-border p-4">{content}</div>
+      </details>
     </>
   );
 }
 
-function useAudioRecorder() {
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-
-  useEffect(
-    () => () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    },
-    [],
-  );
-
-  async function start() {
-    if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
-      throw new Error("Voice recording is not supported in this browser.");
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
-      (candidate) => MediaRecorder.isTypeSupported(candidate),
-    );
-    const mediaRecorder = new MediaRecorder(
-      stream,
-      mimeType ? { mimeType } : undefined,
-    );
-    chunksRef.current = [];
-    mediaRecorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size) chunksRef.current.push(event.data);
-    });
-    recorderRef.current = mediaRecorder;
-    mediaRecorder.start(250);
-  }
-
-  async function stopAndTranscribe(): Promise<string> {
-    const mediaRecorder = recorderRef.current;
-    if (!mediaRecorder || mediaRecorder.state === "inactive") {
-      throw new Error("No active recording was found.");
-    }
-    const blob = await new Promise<Blob>((resolve) => {
-      mediaRecorder.addEventListener(
-        "stop",
-        () =>
-          resolve(
-            new Blob(chunksRef.current, {
-              type: mediaRecorder.mimeType || "audio/webm",
-            }),
-          ),
-        { once: true },
-      );
-      mediaRecorder.stop();
-    });
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    recorderRef.current = null;
-
-    const form = new FormData();
-    form.append("audio", blob, "answer.webm");
-    const response = await fetch("/api/transcribe", {
-      method: "POST",
-      body: form,
-    });
-    const body = (await response.json()) as {
-      transcript?: string;
-      error?: string;
-    };
-    if (!response.ok || !body.transcript) {
-      throw new Error(
-        body.error || "Voice transcription failed. Type your answer instead.",
-      );
-    }
-    return body.transcript;
-  }
-
-  function pause() {
-    const mediaRecorder = recorderRef.current;
-    if (!mediaRecorder || mediaRecorder.state !== "recording") {
-      throw new Error("No active recording can be paused.");
-    }
-    mediaRecorder.pause();
-  }
-
-  function resume() {
-    const mediaRecorder = recorderRef.current;
-    if (!mediaRecorder || mediaRecorder.state !== "paused") {
-      throw new Error("No paused recording can be resumed.");
-    }
-    mediaRecorder.resume();
-  }
-
-  return { pause, resume, start, stopAndTranscribe };
-}
-
 async function requestExtraction(
   turnId: string,
+  topic: string,
+  prompt: string,
   transcript: string,
 ): Promise<InterviewExtraction> {
   const response = await fetch("/api/interview/extract", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ turnId, transcript }),
+    body: JSON.stringify({ turnId, topic, prompt, transcript }),
   });
   const body = (await response.json()) as {
     extraction?: InterviewExtraction;
@@ -754,14 +874,8 @@ async function requestExtraction(
   if (!response.ok || !body.extraction) {
     throw new Error(
       body.error ||
-        "We kept your transcript. Retry extraction or review it manually.",
+        "Your transcript is safe, but fact extraction failed. Retry or review it manually.",
     );
   }
   return body.extraction;
-}
-
-function demoExtraction(): Promise<InterviewExtraction> {
-  return new Promise((resolve) => {
-    window.setTimeout(() => resolve(DEMO_EXTRACTION), 900);
-  });
 }
