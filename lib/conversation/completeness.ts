@@ -38,16 +38,17 @@ export function evaluateCompleteness(
     .filter((entry) => !entry.blocksPacket && !entry.isAnswered(applicantCase))
     .map((entry) => questionIssue(entry, locale, "warning"));
 
-  collectReviewIssues(applicantCase)
-    .filter((issue) => issue.state === "conflict")
-    .forEach((issue) => {
-      blocking.push({
-        id: `conflict:${issue.path}`,
-        paths: [issue.path],
-        severity: "blocking",
-        message: conflictMessage(locale),
-      });
+  collectReviewIssues(applicantCase).forEach((issue) => {
+    blocking.push({
+      id: `${issue.state}:${issue.path}`,
+      paths: [issue.path],
+      severity: "blocking",
+      message:
+        issue.state === "conflict"
+          ? conflictMessage(locale)
+          : unconfirmedMessage(locale),
     });
+  });
 
   if (!applicantCase.finalReviewApproved) {
     blocking.push({
@@ -109,5 +110,13 @@ function finalReviewMessage(locale: SupportedLocale): string {
     "es-US":
       "Revise las respuestas completas y confirme que están listas para los documentos.",
     "zh-CN": "请核对已完成的回答，并确认可以用于生成文件。",
+  }[locale];
+}
+
+function unconfirmedMessage(locale: SupportedLocale): string {
+  return {
+    "en-US": "Confirm this answer before creating documents.",
+    "es-US": "Confirme esta respuesta antes de crear los documentos.",
+    "zh-CN": "生成文件前，请确认这个回答。",
   }[locale];
 }

@@ -5,7 +5,7 @@ export interface ChecklistItem {
   label: string;
   reason: string;
   ruleId: string;
-  status: "needed" | "obtained";
+  status: "needed" | "ready" | "not_available" | "follow_up" | "obtained";
 }
 
 export function buildDocumentChecklist(
@@ -125,7 +125,12 @@ export function buildDocumentChecklist(
       ),
     );
   }
-  return Array.from(new Map(items.map((entry) => [entry.id, entry])).values());
+  return Array.from(
+    new Map(items.map((entry) => [entry.id, entry])).values(),
+  ).map((entry) => ({
+    ...entry,
+    status: applicantCase.documentReadiness[entry.id] ?? entry.status,
+  }));
 }
 
 function item(

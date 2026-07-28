@@ -79,7 +79,7 @@ export const syntheticApplicant: ApplicantCase = {
     {
       id: "condition-migraine",
       name: cv("Chronic migraine", "confirmed"),
-      allegedOnsetDate: cv("2024-06-01", "unconfirmed"),
+      allegedOnsetDate: cv("2024-06-01", "confirmed"),
       symptoms: cv(
         ["light sensitivity", "nausea", "difficulty concentrating"],
         "confirmed",

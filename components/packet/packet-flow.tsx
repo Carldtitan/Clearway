@@ -8,7 +8,6 @@ import {
   FileCheck2,
   FileText,
   LoaderCircle,
-  LockKeyhole,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -267,10 +266,6 @@ export function PacketFlow() {
             </p>
           ) : null}
         </div>
-        <p className="flex items-center gap-2 text-sm font-bold text-muted">
-          <LockKeyhole aria-hidden="true" className="size-4 text-primary" />
-          Generated in memory, then discarded
-        </p>
       </header>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(17rem,0.75fr)] lg:items-start">
@@ -603,11 +598,42 @@ function ChecklistPanel({
       <ul className="mt-5 divide-y divide-border">
         {checklist.map((item) => (
           <li className="flex gap-3 py-3 first:pt-0" key={item.id}>
-            <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded border border-border">
-              <Check aria-hidden="true" className="size-3 text-muted/55" />
+            <span
+              className={cn(
+                "mt-0.5 grid size-5 shrink-0 place-items-center rounded border border-border",
+                (item.status === "ready" || item.status === "obtained") &&
+                  "border-success/20 bg-success-soft",
+                (item.status === "follow_up" ||
+                  item.status === "not_available") &&
+                  "border-warning/25 bg-warning-soft",
+              )}
+            >
+              {item.status === "follow_up" ||
+              item.status === "not_available" ? (
+                <TriangleAlert
+                  aria-hidden="true"
+                  className="size-3 text-warning"
+                />
+              ) : (
+                <Check
+                  aria-hidden="true"
+                  className={cn(
+                    "size-3",
+                    item.status === "ready" || item.status === "obtained"
+                      ? "text-success"
+                      : "text-muted/55",
+                  )}
+                />
+              )}
             </span>
             <div>
-              <p className="text-sm font-bold">{item.label}</p>
+              <p className="text-sm font-bold">
+                {item.label}
+                {item.status === "follow_up" ||
+                item.status === "not_available" ? (
+                  <span className="ml-2 text-xs text-warning">Find later</span>
+                ) : null}
+              </p>
               <p className="mt-0.5 text-xs leading-relaxed text-muted">
                 {item.reason}
               </p>

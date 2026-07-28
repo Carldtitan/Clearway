@@ -8,7 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { GuidedApplication } from "@/components/application/guided-application";
 import { BrandMark } from "@/components/app/brand-mark";
@@ -31,7 +31,8 @@ const stages: StageItem[] = [
 ];
 
 export function Workspace() {
-  const { applicantCase, dispatch } = useApplicantCase();
+  const { applicantCase, dispatch, loadDemo } = useApplicantCase();
+  const demoLoadedRef = useRef(false);
   const activeStage = normalizeStage(applicantCase.stage);
   const locale = applicantCase.conversationLocale ?? "en-US";
   const activeIndex = stages.findIndex((stage) => stage.id === activeStage);
@@ -39,6 +40,20 @@ export function Workspace() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [activeStage]);
+
+  useEffect(() => {
+    if (demoLoadedRef.current) return;
+    const parameters = new URLSearchParams(window.location.search);
+    if (parameters.get("demo") !== "1") return;
+    demoLoadedRef.current = true;
+    loadDemo();
+    const requestedStage = parameters.get("stage");
+    if (requestedStage === "documents" || requestedStage === "records") {
+      window.queueMicrotask(() =>
+        dispatch({ type: "SET_STAGE", stage: requestedStage }),
+      );
+    }
+  }, [dispatch, loadDemo]);
 
   function navigate(stage: UserStage) {
     const destinationIndex = stages.findIndex((item) => item.id === stage);
@@ -48,8 +63,15 @@ export function Workspace() {
   }
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[14.5rem_minmax(0,1fr)]">
-      <aside className="hidden border-r border-border bg-surface lg:flex lg:min-h-dvh lg:flex-col lg:p-5">
+    <div
+      className={cn(
+        "min-h-dvh",
+        applicantCase.conversationLocale &&
+          "lg:grid lg:grid-cols-[14.5rem_minmax(0,1fr)]",
+      )}
+    >
+      {applicantCase.conversationLocale ? (
+        <aside className="hidden border-r border-border bg-surface lg:flex lg:min-h-dvh lg:flex-col lg:p-5">
         <div className="flex items-center gap-3 px-2 py-1">
           <BrandMark />
           <div>
@@ -103,10 +125,12 @@ export function Workspace() {
             })}
           </ol>
         </nav>
-      </aside>
+        </aside>
+      ) : null}
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-10">
+        {applicantCase.conversationLocale ? (
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-10">
           <div className="flex items-center gap-2.5 lg:hidden">
             <BrandMark />
             <p className="font-bold">SSDI Assistant</p>
@@ -119,9 +143,17 @@ export function Workspace() {
               {stageLabel(activeStage, locale)}
             </p>
           ) : null}
-        </header>
+          </header>
+        ) : null}
 
-        <main className="px-4 pb-28 pt-5 sm:px-8 lg:px-12 lg:pb-12">
+        <main
+          className={cn(
+            "px-4 sm:px-8",
+            applicantCase.conversationLocale
+              ? "pb-28 pt-5 lg:px-12 lg:pb-12"
+              : "pb-10 pt-0 lg:px-12",
+          )}
+        >
           <AnimatePresence initial={false} mode="wait">
             <motion.div
               animate={{ opacity: 1 }}

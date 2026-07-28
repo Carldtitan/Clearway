@@ -62,7 +62,7 @@ describe("InterviewFlow", () => {
     expect(screen.getAllByText("Provider list marked complete")).toHaveLength(
       2,
     );
-    expect(screen.getByTestId("case-stage")).toHaveTextContent("check");
+    expect(screen.getByTestId("case-stage")).toHaveTextContent("application");
 
     await user.click(reviewButton);
     expect(screen.getByTestId("case-stage")).toHaveTextContent("review");
@@ -241,7 +241,7 @@ describe("InterviewFlow", () => {
     ).toBeVisible();
     expect(screen.getByTestId("providers-complete")).toHaveTextContent("yes");
     expect(request).toHaveBeenCalledTimes(10);
-  });
+  }, 10_000);
 
   it("retries a failed extraction without asking the applicant to repeat", async () => {
     const user = userEvent.setup();

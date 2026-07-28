@@ -37,6 +37,7 @@ describe("ReviewFlow", () => {
     const user = userEvent.setup();
     const reviewCase = structuredClone(syntheticApplicant);
     reviewCase.stage = "review";
+    reviewCase.conditions[1].allegedOnsetDate.provenance.state = "unconfirmed";
 
     render(
       <CaseProvider initialCase={reviewCase}>

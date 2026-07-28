@@ -61,6 +61,7 @@ import {
   SUPPORTED_LOCALES,
 } from "@/lib/i18n/locales";
 import { parseSpokenNumber } from "@/lib/voice/answer-parsers";
+import { cn } from "@/lib/utils";
 
 type ConversationStatus =
   | "idle"
@@ -100,10 +101,12 @@ export function GuidedApplication() {
   const [typedMode, setTypedMode] = useState(false);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [pending, setPending] = useState<PendingAnswer | null>(null);
+  const [activatedStartLocale, setActivatedStartLocale] =
+    useState<SupportedLocale | null>(null);
   const runIdRef = useRef(0);
   const caseRef = useRef(applicantCase);
   const localeResumeQuestionIdRef = useRef<string | null>(null);
-  const languageStartLocaleRef = useRef<SupportedLocale | null>(null);
+  const processedStartLocaleRef = useRef<SupportedLocale | null>(null);
   const currentQuestion = questionById(applicantCase.activeQuestionId);
   const completion = useMemo(
     () => evaluateCompleteness(applicantCase, locale),
@@ -115,10 +118,12 @@ export function GuidedApplication() {
   }, [applicantCase]);
 
   useEffect(() => {
-    const languageStartLocale = languageStartLocaleRef.current;
-    if (languageStartLocale === locale) {
-      languageStartLocaleRef.current = null;
-      void continueLanguageStart(languageStartLocale);
+    if (
+      activatedStartLocale === locale &&
+      processedStartLocaleRef.current !== activatedStartLocale
+    ) {
+      processedStartLocaleRef.current = activatedStartLocale;
+      void continueLanguageStart(activatedStartLocale);
     }
     const resumeQuestionId = localeResumeQuestionIdRef.current;
     if (resumeQuestionId) {
@@ -130,34 +135,34 @@ export function GuidedApplication() {
     }
     // Locale state must render before localized speech/listen resumes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale]);
+  }, [activatedStartLocale, locale]);
 
   async function chooseLanguage(nextLocale: SupportedLocale) {
     const runId = ++runIdRef.current;
     const definition = localeDefinition(nextLocale);
+    dispatch({ type: "SET_CONVERSATION_LOCALE", locale: nextLocale });
+    dispatch({
+      type: "EDIT_VALUE",
+      path: "applicant.preferredLanguage",
+      value: definition.preferredLanguageValue,
+    });
+    dispatch({ type: "SET_APPLICATION_PHASE", phase: "introduction" });
+    setVoiceSessionActive(true);
+    setStatus("introducing");
+    setError(null);
     try {
       await voice.activate();
       if (runId !== runIdRef.current) return;
-      dispatch({ type: "SET_CONVERSATION_LOCALE", locale: nextLocale });
-      dispatch({
-        type: "EDIT_VALUE",
-        path: "applicant.preferredLanguage",
-        value: definition.preferredLanguageValue,
-      });
-      dispatch({ type: "SET_APPLICATION_PHASE", phase: "introduction" });
-      setVoiceSessionActive(true);
-      setStatus("introducing");
-      setError(null);
-      languageStartLocaleRef.current = nextLocale;
-    } catch (startError) {
+      setActivatedStartLocale(nextLocale);
+    } catch {
       if (runId !== runIdRef.current) return;
+      dispatch({
+        type: "SET_APPLICATION_PHASE",
+        phase: "document_readiness",
+      });
       setTypedMode(true);
       setStatus("error");
-      setError(
-        startError instanceof Error
-          ? startError.message
-          : localized(copy.readyPrompt, nextLocale),
-      );
+      setError(microphoneUnavailable(nextLocale));
     }
   }
 
@@ -174,20 +179,29 @@ export function GuidedApplication() {
       const answer = await voice.listen();
       if (runId !== runIdRef.current) return;
       if (readyAnswer(answer, nextLocale)) {
+        markRemainingPreparationReady();
         beginIntake();
       } else {
-        setTypedMode(true);
-        setError(localized(copy.readyPrompt, nextLocale));
+        trackMissingPreparation(answer, nextLocale);
+        const nextAnswer = await voice.ask(readinessNoted(nextLocale));
+        if (readyAnswer(nextAnswer, nextLocale)) {
+          markRemainingPreparationReady();
+          beginIntake();
+        } else {
+          trackMissingPreparation(nextAnswer, nextLocale);
+          setTypedMode(true);
+          setError(localized(copy.readyPrompt, nextLocale));
+        }
       }
-    } catch (startError) {
+    } catch {
       if (runId !== runIdRef.current) return;
+      dispatch({
+        type: "SET_APPLICATION_PHASE",
+        phase: "document_readiness",
+      });
       setTypedMode(true);
       setStatus("error");
-      setError(
-        startError instanceof Error
-          ? startError.message
-          : localized(copy.readyPrompt, nextLocale),
-      );
+      setError(microphoneUnavailable(nextLocale));
     }
   }
 
@@ -206,6 +220,45 @@ export function GuidedApplication() {
     );
     setCursor(nextCursor);
     window.setTimeout(() => void askAt(nextCursor), 120);
+  }
+
+  function markRemainingPreparationReady() {
+    preparationItems.forEach((item) => {
+      if (!caseRef.current.documentReadiness[item.id]) {
+        dispatch({
+          type: "SET_DOCUMENT_READINESS",
+          documentId: item.id,
+          status: "ready",
+        });
+      }
+    });
+  }
+
+  function trackMissingPreparation(
+    transcript: string,
+    selectedLocale: SupportedLocale,
+  ) {
+    const normalized = transcript.toLocaleLowerCase();
+    preparationItems.forEach((item) => {
+      const labels = [
+        item.label["en-US"],
+        item.label["es-US"],
+        item.label["zh-CN"],
+      ];
+      const terms = documentTerms(item.id);
+      if (
+        labels.some((label) =>
+          normalized.includes(label.toLocaleLowerCase()),
+        ) ||
+        terms[selectedLocale].some((term) => normalized.includes(term))
+      ) {
+        dispatch({
+          type: "SET_DOCUMENT_READINESS",
+          documentId: item.id,
+          status: "follow_up",
+        });
+      }
+    });
   }
 
   async function askAt(startIndex: number) {
@@ -246,15 +299,11 @@ export function GuidedApplication() {
       const transcript = await voice.ask(localized(question.prompt, locale));
       if (runId !== runIdRef.current) return;
       await processTranscript(question, transcript, "voice");
-    } catch (askError) {
+    } catch {
       if (runId !== runIdRef.current) return;
       setTypedMode(true);
       setStatus("error");
-      setError(
-        askError instanceof Error
-          ? askError.message
-          : "The microphone is unavailable.",
-      );
+      setError(microphoneUnavailable(locale));
     }
   }
 
@@ -311,9 +360,9 @@ export function GuidedApplication() {
       setTypedMode(true);
       setStatus("error");
       setError(
-        processingError instanceof Error
+        locale === "en-US" && processingError instanceof Error
           ? processingError.message
-          : "The answer was kept, but could not be processed.",
+          : answerProcessingFailed(locale),
       );
     }
   }
@@ -678,9 +727,15 @@ export function GuidedApplication() {
   function submitTypedAnswer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      applicantCase.applicationPhase === "document_readiness" &&
-      readyAnswer(typedAnswer, locale)
+      applicantCase.applicationPhase === "document_readiness"
     ) {
+      if (!readyAnswer(typedAnswer, locale)) {
+        trackMissingPreparation(typedAnswer, locale);
+        setTypedAnswer("");
+        setError(readinessNoted(locale));
+        return;
+      }
+      markRemainingPreparationReady();
       setTypedAnswer("");
       beginIntake();
       return;
@@ -744,13 +799,20 @@ export function GuidedApplication() {
                 hue={330}
               />
             </div>
-            <VoiceState state={voice.state} status={status} />
+            <VoiceState locale={locale} state={voice.state} status={status} />
           </div>
 
           <div className="p-5 sm:p-8">
             {applicantCase.applicationPhase === "introduction" ||
             applicantCase.applicationPhase === "document_readiness" ? (
-              <Preparation locale={locale} />
+              <Preparation
+                locale={locale}
+                readiness={applicantCase.documentReadiness}
+                showIntroduction={
+                  applicantCase.applicationPhase === "introduction" ||
+                  status === "error"
+                }
+              />
             ) : null}
 
             {currentQuestion ? (
@@ -855,6 +917,7 @@ export function GuidedApplication() {
                   : void voice.speak(localized(copy.introduction, locale))
               }
               onType={() => setTypedMode((visible) => !visible)}
+              showTypeAction={!typedMode}
               state={voice.state}
             />
           </div>
@@ -903,7 +966,7 @@ function LanguageSelection({
             ))}
           </div>
         </div>
-        <div className="mx-auto size-60 lg:size-72">
+        <div className="mx-auto size-60 [mask-image:radial-gradient(circle,black_58%,transparent_74%)] lg:size-72">
           <Orb backgroundColor="#fcf9fb" hoverIntensity={0.28} hue={330} />
         </div>
       </div>
@@ -911,7 +974,17 @@ function LanguageSelection({
   );
 }
 
-function Preparation({ locale }: { locale: SupportedLocale }) {
+function Preparation({
+  locale,
+  readiness,
+  showIntroduction,
+}: {
+  locale: SupportedLocale;
+  readiness: ReturnType<
+    typeof useApplicantCase
+  >["applicantCase"]["documentReadiness"];
+  showIntroduction: boolean;
+}) {
   return (
     <div>
       <p className="text-sm font-bold text-primary">
@@ -920,14 +993,46 @@ function Preparation({ locale }: { locale: SupportedLocale }) {
       <h1 className="mt-3 max-w-[32ch] text-2xl font-bold leading-tight tracking-[-0.025em] text-balance sm:text-3xl">
         {localized(copy.readyPrompt, locale)}
       </h1>
+      {showIntroduction ? (
+        <p className="mt-4 max-w-[65ch] text-sm leading-relaxed text-muted">
+          {localized(copy.introduction, locale)}
+        </p>
+      ) : null}
       <ul className="mt-6 flex flex-wrap gap-2.5">
         {preparationItems.map((item) => (
           <li
-            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-surface-subtle px-3.5 text-sm font-bold"
+            className={cn(
+              "inline-flex min-h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-bold",
+              readiness[item.id] === "follow_up"
+                ? "border-warning/30 bg-warning-soft text-warning"
+                : readiness[item.id] === "ready" ||
+                    readiness[item.id] === "obtained"
+                  ? "border-success/20 bg-success-soft text-success"
+                  : "border-border bg-surface-subtle",
+            )}
             key={item.id}
           >
-            <Check aria-hidden="true" className="size-3.5 text-success" />
+            {readiness[item.id] === "follow_up" ? (
+              <CircleAlert aria-hidden="true" className="size-3.5" />
+            ) : (
+              <Check
+                aria-hidden="true"
+                className={cn(
+                  "size-3.5",
+                  !readiness[item.id] && "text-muted",
+                )}
+              />
+            )}
             {localized(item.label, locale)}
+            {readiness[item.id] === "follow_up" ? (
+              <span className="text-xs">
+                {locale === "es-US"
+                  ? "Buscar después"
+                  : locale === "zh-CN"
+                    ? "稍后补充"
+                    : "Find later"}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -936,22 +1041,30 @@ function Preparation({ locale }: { locale: SupportedLocale }) {
 }
 
 function VoiceState({
+  locale,
   state,
   status,
 }: {
+  locale: SupportedLocale;
   state: ReturnType<typeof useVoiceTurn>["state"];
   status: ConversationStatus;
 }) {
-  const label =
+  const englishLabel =
     state === "listening"
       ? "Listening"
       : state === "speaking"
         ? "Speaking"
         : state === "processing" || status === "extracting"
           ? "Checking your answer"
+          : state === "error" || status === "error"
+            ? "Microphone unavailable"
           : status === "paused"
             ? "Paused"
             : "Ready";
+  const label =
+    locale === "en-US"
+      ? englishLabel
+      : voiceStateTranslation(englishLabel, locale);
   return (
     <p
       aria-live="polite"
@@ -962,12 +1075,34 @@ function VoiceState({
   );
 }
 
+function voiceStateTranslation(
+  state: string,
+  locale: Exclude<SupportedLocale, "en-US">,
+) {
+  const translations: Record<string, Record<typeof locale, string>> = {
+    Listening: { "es-US": "Escuchando", "zh-CN": "正在聆听" },
+    Speaking: { "es-US": "Hablando", "zh-CN": "正在朗读" },
+    "Checking your answer": {
+      "es-US": "Revisando su respuesta",
+      "zh-CN": "正在核对您的回答",
+    },
+    "Microphone unavailable": {
+      "es-US": "Micrófono no disponible",
+      "zh-CN": "麦克风不可用",
+    },
+    Paused: { "es-US": "En pausa", "zh-CN": "已暂停" },
+    Ready: { "es-US": "Listo", "zh-CN": "准备就绪" },
+  };
+  return translations[state]?.[locale] ?? state;
+}
+
 function ConversationControls({
   locale,
   onFinish,
   onPause,
   onRepeat,
   onType,
+  showTypeAction,
   state,
 }: {
   locale: SupportedLocale;
@@ -975,6 +1110,7 @@ function ConversationControls({
   onPause: () => void;
   onRepeat: () => void;
   onType: () => void;
+  showTypeAction: boolean;
   state: ReturnType<typeof useVoiceTurn>["state"];
 }) {
   return (
@@ -1017,10 +1153,12 @@ function ConversationControls({
             ? "重复"
             : "Repeat"}
       </Button>
-      <Button onClick={onType} size="small" variant="quiet">
-        <Keyboard aria-hidden="true" className="size-4" />
-        {localized(copy.typeAnswer, locale)}
-      </Button>
+      {showTypeAction ? (
+        <Button onClick={onType} size="small" variant="quiet">
+          <Keyboard aria-hidden="true" className="size-4" />
+          {localized(copy.typeAnswer, locale)}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -1302,4 +1440,84 @@ function commandUnavailableHere(locale: SupportedLocale) {
     "es-US": "Esa acción está disponible en Documentos o Expedientes.",
     "zh-CN": "该操作可在文件或医疗记录页面中使用。",
   }[locale];
+}
+
+function microphoneUnavailable(locale: SupportedLocale) {
+  return {
+    "en-US": "The microphone is unavailable. Type your answer below.",
+    "es-US":
+      "El micrófono no está disponible. Escriba su respuesta a continuación.",
+    "zh-CN": "麦克风不可用。请在下方输入您的回答。",
+  }[locale];
+}
+
+function answerProcessingFailed(locale: SupportedLocale) {
+  return {
+    "en-US": "Your answer was kept, but it could not be processed.",
+    "es-US": "Su respuesta se conservó, pero no se pudo procesar.",
+    "zh-CN": "您的回答已保留，但暂时无法处理。",
+  }[locale];
+}
+
+function readinessNoted(locale: SupportedLocale) {
+  return {
+    "en-US":
+      "I noted what you need to find. We can continue and return to it later. Say “I’m ready” when you want to begin.",
+    "es-US":
+      "Anoté lo que necesita buscar. Podemos continuar y volver a ello después. Diga “Estoy listo” o “Estoy lista” cuando quiera comenzar.",
+    "zh-CN":
+      "我已记录需要补充的资料。我们可以继续，稍后再处理。准备好后，请说“我准备好了”。",
+  }[locale];
+}
+
+function documentTerms(
+  id: string,
+): Record<SupportedLocale, readonly string[]> {
+  const terms: Record<
+    string,
+    Record<SupportedLocale, readonly string[]>
+  > = {
+    ssn: {
+      "en-US": ["social security", "ssn"],
+      "es-US": ["seguro social"],
+      "zh-CN": ["社会安全", "社保号码"],
+    },
+    "birth-certificate": {
+      "en-US": ["birth certificate", "proof of birth"],
+      "es-US": ["acta de nacimiento", "comprobante de nacimiento"],
+      "zh-CN": ["出生证明"],
+    },
+    "photo-id": {
+      "en-US": ["photo id", "driver license", "passport"],
+      "es-US": ["identificación", "licencia", "pasaporte"],
+      "zh-CN": ["身份证", "驾照", "护照"],
+    },
+    "work-history": {
+      "en-US": ["work history", "job history"],
+      "es-US": ["historial de trabajo", "historial laboral"],
+      "zh-CN": ["工作经历"],
+    },
+    "medical-providers": {
+      "en-US": ["doctor", "provider", "clinic", "hospital"],
+      "es-US": ["médico", "proveedor", "clínica", "hospital"],
+      "zh-CN": ["医生", "诊所", "医院", "医疗机构"],
+    },
+    medications: {
+      "en-US": ["medication", "medicine"],
+      "es-US": ["medicamento", "medicina"],
+      "zh-CN": ["药物", "药品"],
+    },
+    banking: {
+      "en-US": ["bank", "routing", "account"],
+      "es-US": ["banco", "cuenta bancaria"],
+      "zh-CN": ["银行", "账户"],
+    },
+  };
+  return (
+    terms[id] ?? {
+      "en-US": [],
+      "es-US": [],
+      "zh-CN": [],
+    }
+  );
 }
