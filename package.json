@@ -12,6 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "inspect:anvil": "tsx --env-file=.env scripts/inspect-anvil-schema.ts",
+    "verify:packet:live": "tsx --env-file=.env scripts/verify-packet-live.ts",
     "design:detect": "node skills/impeccable/scripts/detect.mjs --json app components"
   },
   "dependencies": {
@@ -51,6 +53,7 @@
     "fast-check": "latest",
     "jsdom": "29.1.1",
     "tailwindcss": "latest",
+    "tsx": "latest",
     "typescript": "latest",
     "vitest": "latest"
   },
