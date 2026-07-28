@@ -219,9 +219,9 @@ function NextAction({ item }: { item: TrackerItem }) {
   const urgent = item.action.state === "day_30";
   return (
     <motion.section
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ y: 0 }}
       className="mt-7 grid overflow-hidden rounded-[var(--radius-surface)] border border-border bg-surface shadow-[0_22px_70px_oklch(0_0_0/0.055)] lg:grid-cols-[minmax(0,1fr)_17rem]"
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ y: 6 }}
     >
       <div className="p-5 sm:p-7">
         <p

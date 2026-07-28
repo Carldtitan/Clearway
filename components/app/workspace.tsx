@@ -31,7 +31,12 @@ const stages: StageItem[] = [
 ];
 
 export function Workspace() {
-  const { applicantCase, dispatch, loadDemo } = useApplicantCase();
+  const {
+    applicantCase,
+    dispatch,
+    loadDemo,
+    setVoiceSessionActive,
+  } = useApplicantCase();
   const demoLoadedRef = useRef(false);
   const activeStage = normalizeStage(applicantCase.stage);
   const locale = applicantCase.conversationLocale ?? "en-US";
@@ -47,13 +52,16 @@ export function Workspace() {
     if (parameters.get("demo") !== "1") return;
     demoLoadedRef.current = true;
     loadDemo();
+    if (parameters.get("voice") === "1") {
+      setVoiceSessionActive(true);
+    }
     const requestedStage = parameters.get("stage");
     if (requestedStage === "documents" || requestedStage === "records") {
       window.queueMicrotask(() =>
         dispatch({ type: "SET_STAGE", stage: requestedStage }),
       );
     }
-  }, [dispatch, loadDemo]);
+  }, [dispatch, loadDemo, setVoiceSessionActive]);
 
   function navigate(stage: UserStage) {
     const destinationIndex = stages.findIndex((item) => item.id === stage);
@@ -156,9 +164,9 @@ export function Workspace() {
         >
           <AnimatePresence initial={false} mode="wait">
             <motion.div
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              initial={{ opacity: 0 }}
+              animate={{ y: 0 }}
+              exit={{ y: -4 }}
+              initial={{ y: 4 }}
               key={activeStage}
               transition={{ duration: 0.16 }}
             >

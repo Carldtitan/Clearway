@@ -1,11 +1,40 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CaseProvider } from "@/components/app/case-context";
+import {
+  CaseProvider,
+  useApplicantCase,
+} from "@/components/app/case-context";
 import { RecordsTracker } from "@/components/records/records-tracker";
 import { syntheticApplicant } from "@/lib/case/seed";
 import { buildTrackerItems } from "@/lib/rules/tracker";
+
+const voiceMocks = vi.hoisted(() => ({
+  activate: vi.fn(),
+  ask: vi.fn(),
+  speak: vi.fn(),
+}));
+
+vi.mock("@/components/voice/use-voice-turn", () => ({
+  useVoiceTurn: () => ({
+    ...voiceMocks,
+    error: null,
+    finishAnswer: vi.fn(),
+    lastTranscript: "",
+    level: 0,
+    listen: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    state: "idle",
+  }),
+}));
+
+beforeEach(() => {
+  voiceMocks.activate.mockReset().mockResolvedValue(undefined);
+  voiceMocks.ask.mockReset();
+  voiceMocks.speak.mockReset().mockResolvedValue(undefined);
+});
 
 describe("records tracker", () => {
   it("sorts the demo into overdue, day-22 follow-up, and received states", () => {
@@ -47,5 +76,42 @@ describe("records tracker", () => {
       screen.getByRole("button", { name: /mark received/i }),
     ).toBeEnabled();
   });
+
+  it("confirms a spoken received-state update before changing the tracker", async () => {
+    const user = userEvent.setup();
+    const applicantCase = structuredClone(syntheticApplicant);
+    applicantCase.stage = "records";
+    voiceMocks.ask
+      .mockResolvedValueOnce("mark received")
+      .mockResolvedValueOnce("yes");
+
+    render(
+      <CaseProvider initialCase={applicantCase}>
+        <VoiceActivator />
+        <RecordsTracker />
+      </CaseProvider>,
+    );
+
+    expect(screen.getByText("1 of 3 received")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Activate voice" }));
+
+    expect(await screen.findByText("2 of 3 received")).toBeVisible();
+    expect(voiceMocks.ask).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "mark the records from Mercy General Hospital as received",
+      ),
+    );
+    expect(voiceMocks.speak).toHaveBeenCalledWith(
+      "Mercy General Hospital is marked received.",
+    );
+  });
 });
 
+function VoiceActivator() {
+  const { setVoiceSessionActive } = useApplicantCase();
+  return (
+    <button onClick={() => setVoiceSessionActive(true)} type="button">
+      Activate voice
+    </button>
+  );
+}
