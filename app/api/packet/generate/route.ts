@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { PacketServiceError } from "@/lib/anvil/client";
 import { parseApplicantCase } from "@/lib/case/transport";
+import { evaluateCompleteness } from "@/lib/conversation/completeness";
 import { generateDocumentPacket } from "@/lib/documents/packet";
 
 export const runtime = "nodejs";
@@ -21,6 +22,20 @@ export async function POST(request: Request) {
       return privateError("That case is too large to create a packet.", 413);
     }
     const applicantCase = parseApplicantCase(JSON.parse(rawBody));
+    const completion = evaluateCompleteness(applicantCase);
+    if (!completion.ready) {
+      return NextResponse.json(
+        {
+          error:
+            "Complete the required answers before creating the documents.",
+          missingItemIds: completion.blocking.map((issue) => issue.id),
+        },
+        {
+          status: 422,
+          headers: { "Cache-Control": "no-store, max-age=0" },
+        },
+      );
+    }
     const packet = await generateDocumentPacket(
       applicantCase,
       new Date().toISOString().slice(0, 10),
@@ -74,4 +89,3 @@ function privateError(message: string, status: number) {
     },
   );
 }
-

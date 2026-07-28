@@ -15,10 +15,13 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useApplicantCase } from "@/components/app/case-context";
 import { Button } from "@/components/ui/button";
+import { useVoiceTurn } from "@/components/voice/use-voice-turn";
+import { parseLocalizedYesNo } from "@/lib/conversation/answers";
+import { parseVoiceCommand } from "@/lib/conversation/commands";
 import { TRACKER_CONFIG } from "@/lib/rules/config";
 import { authorizationWarningDue } from "@/lib/rules/deadlines";
 import {
@@ -29,7 +32,11 @@ import {
 import { cn } from "@/lib/utils";
 
 export function RecordsTracker() {
-  const { applicantCase, dispatch } = useApplicantCase();
+  const { applicantCase, dispatch, voiceSessionActive } = useApplicantCase();
+  const locale = applicantCase.conversationLocale ?? "en-US";
+  const voice = useVoiceTurn(locale);
+  const voiceStartedRef = useRef(false);
+  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const today = trackerToday(applicantCase);
   const items = useMemo(
     () => buildTrackerItems(applicantCase, today),
@@ -59,6 +66,72 @@ export function RecordsTracker() {
     });
   }
 
+  async function continueVoiceRecords() {
+    try {
+      await voice.activate();
+      const summary = recordsSummary(received, items.length, locale);
+      setVoiceMessage(summary);
+      const answer = await voice.ask(
+        `${summary} ${recordsCommandPrompt(locale)}`,
+      );
+      const command = parseVoiceCommand(answer, locale);
+      if (command?.command === "mark_received") {
+        const item = findSpokenItem(items, answer) ?? nextAction ?? items[0];
+        if (!item) return;
+        const confirmation = await voice.ask(
+          markReceivedConfirmation(item.request.providerDisplayName, locale),
+        );
+        const parsed = parseLocalizedYesNo(confirmation, locale);
+        if (parsed.ok && parsed.value) {
+          markReceived(item);
+          setVoiceMessage(
+            markedReceivedMessage(
+              item.request.providerDisplayName,
+              locale,
+            ),
+          );
+          await voice.speak(
+            markedReceivedMessage(
+              item.request.providerDisplayName,
+              locale,
+            ),
+          );
+        }
+        return;
+      }
+      if (
+        command?.command === "generate_packet" ||
+        /(?:documents|documentos|文件)/i.test(answer)
+      ) {
+        dispatch({ type: "SET_STAGE", stage: "documents" });
+        return;
+      }
+      if (command?.command === "status") {
+        await voice.speak(summary);
+        return;
+      }
+      const item = findSpokenItem(items, answer) ?? nextAction;
+      if (item?.action.script) {
+        setVoiceMessage(item.action.script);
+        await voice.speak(item.action.script);
+      }
+    } catch (voiceError) {
+      setVoiceMessage(
+        voiceError instanceof Error
+          ? voiceError.message
+          : recordsCommandPrompt(locale),
+      );
+    }
+  }
+
+  useEffect(() => {
+    if (!voiceSessionActive || voiceStartedRef.current) return;
+    voiceStartedRef.current = true;
+    void continueVoiceRecords();
+    // Voice continuation runs once when Records opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceSessionActive]);
+
   return (
     <div className="mx-auto w-full max-w-[72rem] pb-24 pt-3 sm:pt-7">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -72,6 +145,15 @@ export function RecordsTracker() {
           {received} of {items.length} received
         </p>
       </header>
+
+      {voiceMessage ? (
+        <p
+          aria-live="polite"
+          className="mt-5 inline-flex min-h-10 items-center rounded-full border border-border bg-surface px-4 text-sm font-bold text-muted"
+        >
+          {voiceMessage}
+        </p>
+      ) : null}
 
       {authorizationDue ? (
         <section className="mt-7 flex flex-col gap-4 rounded-[var(--radius-surface)] border border-warning/25 bg-warning-soft p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -90,7 +172,7 @@ export function RecordsTracker() {
           </div>
           <Button
             className="shrink-0"
-            onClick={() => dispatch({ type: "SET_STAGE", stage: "packet" })}
+            onClick={() => dispatch({ type: "SET_STAGE", stage: "documents" })}
             size="small"
             variant="secondary"
           >
@@ -122,11 +204,11 @@ export function RecordsTracker() {
           applicant to use.
         </p>
         <Button
-          onClick={() => dispatch({ type: "SET_STAGE", stage: "packet" })}
+          onClick={() => dispatch({ type: "SET_STAGE", stage: "documents" })}
           variant="quiet"
         >
           <ArrowLeft aria-hidden="true" className="size-4" />
-          Back to packet
+          Back to documents
         </Button>
       </footer>
     </div>
@@ -403,4 +485,64 @@ function formatDate(value: string | null): string {
     year: "numeric",
     timeZone: "UTC",
   }).format(date);
+}
+
+function findSpokenItem(items: TrackerItem[], transcript: string) {
+  const normalized = transcript.toLocaleLowerCase();
+  return items.find((item) => {
+    const name = item.request.providerDisplayName.toLocaleLowerCase();
+    const meaningfulParts = name
+      .replace(/\b(?:dr|doctor|clinic|hospital|medical|center)\b/g, "")
+      .split(/\s+/)
+      .filter((part) => part.length > 2);
+    return (
+      normalized.includes(name) ||
+      meaningfulParts.some((part) => normalized.includes(part))
+    );
+  });
+}
+
+function recordsSummary(
+  received: number,
+  total: number,
+  locale: "en-US" | "es-US" | "zh-CN",
+) {
+  return {
+    "en-US": `${received} of ${total} medical record requests are complete.`,
+    "es-US": `${received} de ${total} solicitudes de expedientes médicos están completas.`,
+    "zh-CN": `${total} 项医疗记录申请中已有 ${received} 项完成。`,
+  }[locale];
+}
+
+function recordsCommandPrompt(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US":
+      "Say a provider name to hear the next action, say mark received and the provider name, or say open documents.",
+    "es-US":
+      "Diga el nombre de un proveedor para escuchar la próxima acción, diga marcar recibido y el nombre, o diga abrir documentos.",
+    "zh-CN":
+      "请说出医疗机构名称以听取下一步操作；也可以说“标记为已收到”加机构名称，或说“打开文件”。",
+  }[locale];
+}
+
+function markReceivedConfirmation(
+  providerName: string,
+  locale: "en-US" | "es-US" | "zh-CN",
+) {
+  return {
+    "en-US": `Should I mark the records from ${providerName} as received?`,
+    "es-US": `¿Debo marcar como recibidos los expedientes de ${providerName}?`,
+    "zh-CN": `要将 ${providerName} 的记录标记为已收到吗？`,
+  }[locale];
+}
+
+function markedReceivedMessage(
+  providerName: string,
+  locale: "en-US" | "es-US" | "zh-CN",
+) {
+  return {
+    "en-US": `${providerName} is marked received.`,
+    "es-US": `${providerName} está marcado como recibido.`,
+    "zh-CN": `${providerName} 已标记为收到。`,
+  }[locale];
 }

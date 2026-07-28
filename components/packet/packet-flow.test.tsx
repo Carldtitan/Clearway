@@ -35,7 +35,7 @@ beforeEach(() => {
 describe("PacketFlow", () => {
   it("shows the exact packet and personalized checklist before generation", () => {
     const applicantCase = structuredClone(syntheticApplicant);
-    applicantCase.stage = "packet";
+    applicantCase.stage = "documents";
     applicantCase.conditions[1].allegedOnsetDate.provenance.state =
       "confirmed";
     render(
@@ -46,7 +46,7 @@ describe("PacketFlow", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: /turn one review into a filing packet/i,
+        name: /review and download your application documents/i,
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("SSA-16").length).toBeGreaterThan(0);
@@ -62,7 +62,7 @@ describe("PacketFlow", () => {
   it("adds an extra blank authorization only after the applicant asks", async () => {
     const user = userEvent.setup();
     const applicantCase = structuredClone(syntheticApplicant);
-    applicantCase.stage = "packet";
+    applicantCase.stage = "documents";
     render(
       <CaseProvider initialCase={applicantCase}>
         <PacketFlow />
@@ -81,8 +81,11 @@ describe("PacketFlow", () => {
   it("generates and advances when an active voice session asks it to", async () => {
     const user = userEvent.setup();
     const applicantCase = structuredClone(syntheticApplicant);
-    applicantCase.stage = "packet";
-    voiceMocks.ask.mockResolvedValueOnce("yes");
+    applicantCase.stage = "documents";
+    voiceMocks.ask
+      .mockResolvedValueOnce("yes")
+      .mockResolvedValueOnce("no")
+      .mockResolvedValueOnce("yes");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -117,10 +120,13 @@ describe("PacketFlow", () => {
 
     expect(await screen.findByText("Packet ready")).toBeVisible();
     expect(voiceMocks.speak).toHaveBeenCalledWith(
-      "I am building your forms, continuation sheets, and evidence index now.",
+      "I am creating the forms, continuation sheets, and evidence index now.",
     );
     expect(voiceMocks.ask).toHaveBeenCalledWith(
-      "Your packet is ready to download. Would you like to open the medical records tracker next?",
+      "Would you like me to create your application documents now?",
+    );
+    expect(voiceMocks.ask).toHaveBeenCalledWith(
+      "Would you like to open the medical records tracker?",
     );
     expect(screen.getByTestId("case-stage")).toHaveTextContent("records");
   });

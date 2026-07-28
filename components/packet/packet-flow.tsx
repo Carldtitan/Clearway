@@ -22,9 +22,12 @@ import { useApplicantCase } from "@/components/app/case-context";
 import { Button } from "@/components/ui/button";
 import { useVoiceTurn } from "@/components/voice/use-voice-turn";
 import { isPacketStale } from "@/lib/case/reducer";
+import {
+  parseLocalizedYesNo,
+} from "@/lib/conversation/answers";
+import { evaluateCompleteness } from "@/lib/conversation/completeness";
 import { buildDocumentChecklist } from "@/lib/rules/checklist";
 import { partitionForForm } from "@/lib/rules/consistency";
-import { parseYesNo } from "@/lib/voice/answer-parsers";
 import { cn } from "@/lib/utils";
 
 interface PacketDocument {
@@ -65,7 +68,12 @@ type GenerationStatus = "idle" | "generating" | "complete" | "failed";
 
 export function PacketFlow() {
   const { applicantCase, dispatch, voiceSessionActive } = useApplicantCase();
-  const voice = useVoiceTurn();
+  const locale = applicantCase.conversationLocale ?? "en-US";
+  const voice = useVoiceTurn(locale);
+  const completion = useMemo(
+    () => evaluateCompleteness(applicantCase, locale),
+    [applicantCase, locale],
+  );
   const checklist = useMemo(
     () => buildDocumentChecklist(applicantCase),
     [applicantCase],
@@ -132,26 +140,33 @@ export function PacketFlow() {
   async function continueVoiceBuild() {
     try {
       await voice.activate();
-      setVoiceMessage("Building your filing packet now.");
-      await voice.speak(
-        "I am building your forms, continuation sheets, and evidence index now.",
-      );
-      const complete = await generatePacket();
-      if (!complete) {
-        setVoiceMessage(
-          "The packet could not be generated. Your answers are still safe.",
-        );
-        await voice.speak(
-          "The packet service did not finish, but none of your answers were lost. You can say try again after using the visible retry control.",
-        );
+      setVoiceMessage(documentsReadyMessage(locale));
+      const permission = await voice.ask(generateConfirmation(locale));
+      const parsedPermission = parseLocalizedYesNo(permission, locale);
+      if (!parsedPermission.ok || !parsedPermission.value) {
+        setVoiceMessage(documentsReadyMessage(locale));
+        await voice.speak(generateDeferred(locale));
         return;
       }
-      setVoiceMessage("Packet ready. Listening for your next step.");
-      const answer = await voice.ask(
-        "Your packet is ready to download. Would you like to open the medical records tracker next?",
-      );
-      const parsed = parseYesNo(answer);
-      if (parsed.ok && parsed.value) {
+      setVoiceMessage(generatingMessage(locale));
+      await voice.speak(generatingMessage(locale));
+      const generatedUrl = await generatePacket();
+      if (!generatedUrl) {
+        setVoiceMessage(
+          generationFailedMessage(locale),
+        );
+        await voice.speak(generationFailedMessage(locale));
+        return;
+      }
+      setVoiceMessage(downloadReadyMessage(locale));
+      const downloadAnswer = await voice.ask(downloadConfirmation(locale));
+      const parsedDownload = parseLocalizedYesNo(downloadAnswer, locale);
+      if (parsedDownload.ok && parsedDownload.value) {
+        triggerDownload(generatedUrl);
+      }
+      const recordsAnswer = await voice.ask(recordsConfirmation(locale));
+      const parsedRecords = parseLocalizedYesNo(recordsAnswer, locale);
+      if (parsedRecords.ok && parsedRecords.value) {
         dispatch({ type: "SET_STAGE", stage: "records" });
       }
     } catch (voiceError) {
@@ -163,7 +178,13 @@ export function PacketFlow() {
     }
   }
 
-  async function generatePacket(): Promise<boolean> {
+  async function generatePacket(): Promise<string | null> {
+    const readiness = evaluateCompleteness(applicantCase, locale);
+    if (!readiness.ready) {
+      setStatus("failed");
+      setErrorMessage(incompleteDocumentsMessage(locale));
+      return null;
+    }
     if (downloadUrlRef.current) {
       URL.revokeObjectURL(downloadUrlRef.current);
       downloadUrlRef.current = null;
@@ -212,7 +233,7 @@ export function PacketFlow() {
           status: "complete",
         },
       });
-      return true;
+      return nextDownloadUrl;
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -224,7 +245,7 @@ export function PacketFlow() {
         type: "SET_DOCUMENT_STATE",
         state: { generatedRevision: null, status: "failed" },
       });
-      return false;
+      return null;
     }
   }
 
@@ -232,9 +253,9 @@ export function PacketFlow() {
     <div className="mx-auto w-full max-w-[72rem] pb-24 pt-3 sm:pt-7">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-bold text-primary">Packet · Anvil</p>
+          <p className="text-sm font-bold text-primary">Documents</p>
           <h1 className="mt-2 max-w-[15ch] text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
-            Turn one review into a filing packet.
+            Review and download your application documents.
           </h1>
           {voiceSessionActive && voiceMessage ? (
             <p
@@ -385,7 +406,7 @@ export function PacketFlow() {
                 </a>
               ) : (
                 <Button
-                  disabled={status === "generating"}
+                  disabled={status === "generating" || !completion.ready}
                   onClick={generatePacket}
                 >
                   {status === "failed" ? (
@@ -414,6 +435,11 @@ export function PacketFlow() {
               and file it yourself. SSDI Assistant does not submit forms to
               SSA.
             </p>
+            {!completion.ready ? (
+              <p className="mt-3 text-sm font-bold text-danger">
+                {incompleteDocumentsMessage(locale)}
+              </p>
+            ) : null}
           </div>
         </section>
 
@@ -591,4 +617,92 @@ function ChecklistPanel({
       </ul>
     </aside>
   );
+}
+
+function triggerDownload(url: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "ssdi-application-working-packet.pdf";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function documentsReadyMessage(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US": "Your confirmed answers are ready for the documents.",
+    "es-US": "Sus respuestas confirmadas están listas para los documentos.",
+    "zh-CN": "您确认的回答已可用于生成文件。",
+  }[locale];
+}
+
+function generateConfirmation(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US": "Would you like me to create your application documents now?",
+    "es-US": "¿Quiere que cree ahora los documentos de su solicitud?",
+    "zh-CN": "您要我现在生成申请文件吗？",
+  }[locale];
+}
+
+function generateDeferred(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US": "Okay. The documents are ready whenever you are.",
+    "es-US": "De acuerdo. Los documentos estarán listos cuando usted quiera.",
+    "zh-CN": "好的。您准备好后可以随时生成文件。",
+  }[locale];
+}
+
+function generatingMessage(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US":
+      "I am creating the forms, continuation sheets, and evidence index now.",
+    "es-US":
+      "Estoy creando los formularios, las hojas de continuación y el índice de evidencia.",
+    "zh-CN": "正在生成表格、续页和证据索引。",
+  }[locale];
+}
+
+function generationFailedMessage(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US":
+      "The document service did not finish. Your answers are still available.",
+    "es-US":
+      "El servicio de documentos no terminó. Sus respuestas siguen disponibles.",
+    "zh-CN": "文件服务未完成，但您的回答仍然保留。",
+  }[locale];
+}
+
+function downloadReadyMessage(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US": "Your documents are ready to download.",
+    "es-US": "Sus documentos están listos para descargar.",
+    "zh-CN": "您的文件已可下载。",
+  }[locale];
+}
+
+function downloadConfirmation(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US": "Would you like me to download them now?",
+    "es-US": "¿Quiere que los descargue ahora?",
+    "zh-CN": "现在要下载吗？",
+  }[locale];
+}
+
+function recordsConfirmation(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US": "Would you like to open the medical records tracker?",
+    "es-US": "¿Quiere abrir el seguimiento de expedientes médicos?",
+    "zh-CN": "要打开医疗记录跟踪页面吗？",
+  }[locale];
+}
+
+function incompleteDocumentsMessage(locale: "en-US" | "es-US" | "zh-CN") {
+  return {
+    "en-US":
+      "Return to Application and complete the required answers before creating documents.",
+    "es-US":
+      "Vuelva a Solicitud y complete las respuestas necesarias antes de crear los documentos.",
+    "zh-CN": "请返回申请页面，完成必答内容后再生成文件。",
+  }[locale];
 }
