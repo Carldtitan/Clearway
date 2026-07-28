@@ -12,14 +12,16 @@ import {
   Trash2,
   UserRound,
   UsersRound,
+  Volume2,
   type LucideIcon,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useApplicantCase } from "@/components/app/case-context";
 import { Button } from "@/components/ui/button";
 import { inputClassName } from "@/components/ui/form-controls";
+import { useVoiceTurn } from "@/components/voice/use-voice-turn";
 import type {
   CanonicalValue,
   CaptureSource,
@@ -27,6 +29,7 @@ import type {
 } from "@/lib/case/types";
 import { collectReviewIssues } from "@/lib/case/review";
 import { validateCrossForm } from "@/lib/rules/consistency";
+import { parseYesNo } from "@/lib/voice/answer-parsers";
 import { cn } from "@/lib/utils";
 
 type ReviewSection =
@@ -84,7 +87,10 @@ const sections: ReviewSectionItem[] = [
 ];
 
 export function ReviewFlow() {
-  const { applicantCase, dispatch } = useApplicantCase();
+  const { applicantCase, dispatch, voiceSessionActive } = useApplicantCase();
+  const voice = useVoiceTurn();
+  const voiceReviewStartedRef = useRef(false);
+  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const issues = useMemo(
     () => collectReviewIssues(applicantCase),
     [applicantCase],
@@ -104,6 +110,45 @@ export function ReviewFlow() {
     useState<ReviewSection>(initialSection);
   const ready = issues.length === 0 && blockingConsistency.length === 0;
 
+  async function runVoiceReview() {
+    try {
+      await voice.activate();
+      if (!ready) {
+        const count = issues.length + blockingConsistency.length;
+        const message = `I found ${count} ${
+          count === 1 ? "detail" : "details"
+        } that still need your decision. They are highlighted on this screen.`;
+        setVoiceMessage(message);
+        await voice.speak(message);
+        return;
+      }
+      setVoiceMessage("The review is clear. Listening for your next step.");
+      const answer = await voice.ask(
+        "Your confirmed answers have no unresolved conflicts, and the provider list is complete. Should I build your filing packet now?",
+      );
+      const parsed = parseYesNo(answer);
+      if (parsed.ok && parsed.value) {
+        dispatch({ type: "SET_STAGE", stage: "packet" });
+      } else {
+        setVoiceMessage("Packet building is paused until you are ready.");
+      }
+    } catch (reviewError) {
+      setVoiceMessage(
+        reviewError instanceof Error
+          ? reviewError.message
+          : "Voice review paused. The visible controls still work.",
+      );
+    }
+  }
+
+  useEffect(() => {
+    if (!voiceSessionActive || voiceReviewStartedRef.current) return;
+    voiceReviewStartedRef.current = true;
+    void runVoiceReview();
+    // Voice continuation is intentionally triggered once on stage entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceSessionActive]);
+
   return (
     <div className="mx-auto w-full max-w-[72rem] pb-24 pt-3 sm:pt-7">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -114,6 +159,15 @@ export function ReviewFlow() {
           <h1 className="mt-2 max-w-[16ch] text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
             Make sure the packet says what you mean.
           </h1>
+          {voiceSessionActive && voiceMessage ? (
+            <p
+              aria-live="polite"
+              className="mt-4 flex max-w-[40rem] items-center gap-2 text-sm font-bold text-primary"
+            >
+              <Volume2 aria-hidden="true" className="size-4" />
+              {voiceMessage}
+            </p>
+          ) : null}
         </div>
         <ReviewSummary
           blockingCount={blockingConsistency.length}

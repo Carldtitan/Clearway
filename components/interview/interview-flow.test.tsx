@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CaseProvider, useApplicantCase } from "@/components/app/case-context";
 import { InterviewFlow } from "@/components/interview/interview-flow";
+import { syntheticApplicant } from "@/lib/case/seed";
 
 const voiceMocks = vi.hoisted(() => ({
   activate: vi.fn(),
@@ -65,6 +66,21 @@ describe("InterviewFlow", () => {
 
     await user.click(reviewButton);
     expect(screen.getByTestId("case-stage")).toHaveTextContent("review");
+  });
+
+  it("does not duplicate an already populated synthetic case", async () => {
+    const user = userEvent.setup();
+    render(
+      <CaseProvider initialCase={structuredClone(syntheticApplicant)}>
+        <InterviewFlow />
+        <CaseProbe />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Demo answer" }));
+    await screen.findByRole("button", { name: "Review captured facts" });
+
+    expect(screen.getByTestId("condition-count")).toHaveTextContent("2");
   });
 
   it("asks, listens, reads back, and advances without typing", async () => {

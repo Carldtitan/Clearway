@@ -1,10 +1,36 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CaseProvider } from "@/components/app/case-context";
+import { CaseProvider, useApplicantCase } from "@/components/app/case-context";
 import { PacketFlow } from "@/components/packet/packet-flow";
 import { syntheticApplicant } from "@/lib/case/seed";
+
+const voiceMocks = vi.hoisted(() => ({
+  activate: vi.fn(),
+  ask: vi.fn(),
+  speak: vi.fn(),
+}));
+
+vi.mock("@/components/voice/use-voice-turn", () => ({
+  useVoiceTurn: () => ({
+    ...voiceMocks,
+    error: null,
+    finishAnswer: vi.fn(),
+    lastTranscript: "",
+    level: 0,
+    listen: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    state: "idle",
+  }),
+}));
+
+beforeEach(() => {
+  voiceMocks.activate.mockReset().mockResolvedValue(undefined);
+  voiceMocks.ask.mockReset();
+  voiceMocks.speak.mockReset().mockResolvedValue(undefined);
+});
 
 describe("PacketFlow", () => {
   it("shows the exact packet and personalized checklist before generation", () => {
@@ -51,4 +77,65 @@ describe("PacketFlow", () => {
     );
     expect(screen.getAllByText("SSA-827")).toHaveLength(2);
   });
+
+  it("generates and advances when an active voice session asks it to", async () => {
+    const user = userEvent.setup();
+    const applicantCase = structuredClone(syntheticApplicant);
+    applicantCase.stage = "packet";
+    voiceMocks.ask.mockResolvedValueOnce("yes");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(new Blob(["packet"]), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/pdf",
+            "x-packet-documents": "5",
+            "x-packet-pages": "39",
+          },
+        }),
+      ),
+    );
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:packet"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    render(
+      <CaseProvider initialCase={applicantCase}>
+        <VoiceActivator />
+        <PacketFlow />
+        <StageProbe />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Activate voice" }));
+
+    expect(await screen.findByText("Packet ready")).toBeVisible();
+    expect(voiceMocks.speak).toHaveBeenCalledWith(
+      "I am building your forms, continuation sheets, and evidence index now.",
+    );
+    expect(voiceMocks.ask).toHaveBeenCalledWith(
+      "Your packet is ready to download. Would you like to open the medical records tracker next?",
+    );
+    expect(screen.getByTestId("case-stage")).toHaveTextContent("records");
+  });
 });
+
+function VoiceActivator() {
+  const { setVoiceSessionActive } = useApplicantCase();
+  return (
+    <button onClick={() => setVoiceSessionActive(true)} type="button">
+      Activate voice
+    </button>
+  );
+}
+
+function StageProbe() {
+  const { applicantCase } = useApplicantCase();
+  return <output data-testid="case-stage">{applicantCase.stage}</output>;
+}

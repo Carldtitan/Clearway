@@ -13,15 +13,18 @@ import {
   ShieldCheck,
   Sparkles,
   TriangleAlert,
+  Volume2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useApplicantCase } from "@/components/app/case-context";
 import { Button } from "@/components/ui/button";
+import { useVoiceTurn } from "@/components/voice/use-voice-turn";
 import { isPacketStale } from "@/lib/case/reducer";
 import { buildDocumentChecklist } from "@/lib/rules/checklist";
 import { partitionForForm } from "@/lib/rules/consistency";
+import { parseYesNo } from "@/lib/voice/answer-parsers";
 import { cn } from "@/lib/utils";
 
 interface PacketDocument {
@@ -61,7 +64,8 @@ const baseDocuments: PacketDocument[] = [
 type GenerationStatus = "idle" | "generating" | "complete" | "failed";
 
 export function PacketFlow() {
-  const { applicantCase, dispatch } = useApplicantCase();
+  const { applicantCase, dispatch, voiceSessionActive } = useApplicantCase();
+  const voice = useVoiceTurn();
   const checklist = useMemo(
     () => buildDocumentChecklist(applicantCase),
     [applicantCase],
@@ -94,6 +98,8 @@ export function PacketFlow() {
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const downloadUrlRef = useRef<string | null>(null);
+  const voiceBuildStartedRef = useRef(false);
+  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const stale = isPacketStale(applicantCase);
 
   useEffect(() => {
@@ -115,7 +121,49 @@ export function PacketFlow() {
     [],
   );
 
-  async function generatePacket() {
+  useEffect(() => {
+    if (!voiceSessionActive || voiceBuildStartedRef.current) return;
+    voiceBuildStartedRef.current = true;
+    void continueVoiceBuild();
+    // Voice continuation is intentionally triggered once on stage entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceSessionActive]);
+
+  async function continueVoiceBuild() {
+    try {
+      await voice.activate();
+      setVoiceMessage("Building your filing packet now.");
+      await voice.speak(
+        "I am building your forms, continuation sheets, and evidence index now.",
+      );
+      const complete = await generatePacket();
+      if (!complete) {
+        setVoiceMessage(
+          "The packet could not be generated. Your answers are still safe.",
+        );
+        await voice.speak(
+          "The packet service did not finish, but none of your answers were lost. You can say try again after using the visible retry control.",
+        );
+        return;
+      }
+      setVoiceMessage("Packet ready. Listening for your next step.");
+      const answer = await voice.ask(
+        "Your packet is ready to download. Would you like to open the medical records tracker next?",
+      );
+      const parsed = parseYesNo(answer);
+      if (parsed.ok && parsed.value) {
+        dispatch({ type: "SET_STAGE", stage: "records" });
+      }
+    } catch (voiceError) {
+      setVoiceMessage(
+        voiceError instanceof Error
+          ? voiceError.message
+          : "Voice control paused. The packet controls still work.",
+      );
+    }
+  }
+
+  async function generatePacket(): Promise<boolean> {
     if (downloadUrlRef.current) {
       URL.revokeObjectURL(downloadUrlRef.current);
       downloadUrlRef.current = null;
@@ -164,6 +212,7 @@ export function PacketFlow() {
           status: "complete",
         },
       });
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -175,6 +224,7 @@ export function PacketFlow() {
         type: "SET_DOCUMENT_STATE",
         state: { generatedRevision: null, status: "failed" },
       });
+      return false;
     }
   }
 
@@ -186,6 +236,15 @@ export function PacketFlow() {
           <h1 className="mt-2 max-w-[15ch] text-4xl font-bold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
             Turn one review into a filing packet.
           </h1>
+          {voiceSessionActive && voiceMessage ? (
+            <p
+              aria-live="polite"
+              className="mt-4 flex max-w-[40rem] items-center gap-2 text-sm font-bold text-primary"
+            >
+              <Volume2 aria-hidden="true" className="size-4" />
+              {voiceMessage}
+            </p>
+          ) : null}
         </div>
         <p className="flex items-center gap-2 text-sm font-bold text-muted">
           <LockKeyhole aria-hidden="true" className="size-4 text-primary" />

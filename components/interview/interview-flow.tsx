@@ -142,8 +142,12 @@ const factLabels: Partial<
 };
 
 export function InterviewFlow() {
-  const { dispatch, setVoiceSessionActive, voiceSessionActive } =
-    useApplicantCase();
+  const {
+    applicantCase,
+    dispatch,
+    setVoiceSessionActive,
+    voiceSessionActive,
+  } = useApplicantCase();
   const [mode, setMode] = useState<InputMode>("voice");
   const [status, setStatus] = useState<InterviewStatus>("intro");
   const [topicIndex, setTopicIndex] = useState(0);
@@ -342,15 +346,17 @@ export function InterviewFlow() {
   }
 
   function commitPending(turn: PendingTurn) {
-    applyInterviewExtraction(dispatch, turn.extraction, turn.turnId, {
-      confirmed: true,
-      source:
-        turn.source === "typed"
-          ? "typed"
-          : turn.source === "demo"
-            ? "seed"
-            : "voice",
-    });
+    if (!(turn.source === "demo" && applicantCase.mode === "synthetic_demo")) {
+      applyInterviewExtraction(dispatch, turn.extraction, turn.turnId, {
+        confirmed: true,
+        source:
+          turn.source === "typed"
+            ? "typed"
+            : turn.source === "demo"
+              ? "seed"
+              : "voice",
+      });
+    }
     dispatch({
       type: "UPDATE_INTERVIEW_TURN",
       turnId: turn.turnId,
