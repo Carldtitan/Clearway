@@ -22,11 +22,17 @@ interface CaseContextValue {
 
 const CaseContext = createContext<CaseContextValue | null>(null);
 
-export function CaseProvider({ children }: { children: ReactNode }) {
+export function CaseProvider({
+  children,
+  initialCase,
+}: {
+  children: ReactNode;
+  initialCase?: ApplicantCase;
+}) {
   const [applicantCase, dispatch] = useReducer(
     caseReducer,
-    undefined,
-    createEmptyApplicantCase,
+    initialCase,
+    (source) => (source ? structuredClone(source) : createEmptyApplicantCase()),
   );
 
   const value = useMemo(

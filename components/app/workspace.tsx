@@ -11,11 +11,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useEffect } from "react";
 
 import { BrandMark } from "@/components/app/brand-mark";
 import { useApplicantCase } from "@/components/app/case-context";
 import { CheckFlow } from "@/components/check/check-flow";
 import { InterviewFlow } from "@/components/interview/interview-flow";
+import { ReviewFlow } from "@/components/review/review-flow";
 import type { ApplicantCase } from "@/lib/case/types";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +60,10 @@ export function Workspace() {
   const activeIndex = stages.findIndex(
     (stage) => stage.id === applicantCase.stage,
   );
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [applicantCase.stage]);
 
   function navigate(stage: Stage) {
     const destinationIndex = stages.findIndex((item) => item.id === stage);
@@ -160,8 +166,8 @@ export function Workspace() {
             >
               {applicantCase.stage === "check" ? <CheckFlow /> : null}
               {applicantCase.stage === "interview" ? <InterviewFlow /> : null}
-              {applicantCase.stage === "review" ||
-              applicantCase.stage === "packet" ||
+              {applicantCase.stage === "review" ? <ReviewFlow /> : null}
+              {applicantCase.stage === "packet" ||
               applicantCase.stage === "records" ? (
                 <StagePlaceholder stage={applicantCase.stage} />
               ) : null}
