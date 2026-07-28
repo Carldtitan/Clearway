@@ -8,10 +8,6 @@ export interface LocaleDefinition {
   speechRecognitionLanguage: string;
   deepgramModel: "nova-3-medical" | "nova-3";
   deepgramLanguage: "en-US" | "es" | "zh-CN";
-  voiceEnvironmentKey:
-    | "ELEVENLABS_VOICE_ID_EN"
-    | "ELEVENLABS_VOICE_ID_ES"
-    | "ELEVENLABS_VOICE_ID_ZH";
 }
 
 export const SUPPORTED_LOCALES: readonly LocaleDefinition[] = [
@@ -23,7 +19,6 @@ export const SUPPORTED_LOCALES: readonly LocaleDefinition[] = [
     speechRecognitionLanguage: "en-US",
     deepgramModel: "nova-3-medical",
     deepgramLanguage: "en-US",
-    voiceEnvironmentKey: "ELEVENLABS_VOICE_ID_EN",
   },
   {
     id: "es-US",
@@ -33,7 +28,6 @@ export const SUPPORTED_LOCALES: readonly LocaleDefinition[] = [
     speechRecognitionLanguage: "es-US",
     deepgramModel: "nova-3",
     deepgramLanguage: "es",
-    voiceEnvironmentKey: "ELEVENLABS_VOICE_ID_ES",
   },
   {
     id: "zh-CN",
@@ -43,7 +37,6 @@ export const SUPPORTED_LOCALES: readonly LocaleDefinition[] = [
     speechRecognitionLanguage: "zh-CN",
     deepgramModel: "nova-3",
     deepgramLanguage: "zh-CN",
-    voiceEnvironmentKey: "ELEVENLABS_VOICE_ID_ZH",
   },
 ] as const;
 

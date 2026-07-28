@@ -181,55 +181,59 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = null;
     }
-    try {
-      const response = await fetch("/api/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, locale }),
-        signal: speechAbort.signal,
-      });
-      if (speechRun !== speechRunRef.current) return;
-      if (response.ok) {
-        const blob = await response.blob();
+    if (locale !== "zh-CN") {
+      try {
+        const response = await fetch("/api/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, locale }),
+          signal: speechAbort.signal,
+        });
         if (speechRun !== speechRunRef.current) return;
-        const context = await unlockAudioOutput();
-        if (context) {
-          const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+        if (response.ok) {
+          const blob = await response.blob();
           if (speechRun !== speechRunRef.current) return;
-          const source = context.createBufferSource();
-          source.buffer = buffer;
-          source.connect(context.destination);
-          playbackSourceRef.current = source;
-          await new Promise<void>((resolve) => {
-            source.addEventListener("ended", () => resolve(), { once: true });
-            source.start();
-          });
-          playbackSourceRef.current = null;
-        } else {
-          const url = URL.createObjectURL(blob);
-          audioUrlRef.current = url;
-          const audio = new Audio(url);
-          audioRef.current = audio;
-          await new Promise<void>((resolve, reject) => {
-            audio.addEventListener("ended", () => resolve(), { once: true });
-            audio.addEventListener(
-              "error",
-              () => reject(new Error("Generated speech could not play.")),
-              { once: true },
+          const context = await unlockAudioOutput();
+          if (context) {
+            const buffer = await context.decodeAudioData(
+              await blob.arrayBuffer(),
             );
-            audio.play().catch(reject);
-          });
-          audioRef.current = null;
-          URL.revokeObjectURL(url);
-          audioUrlRef.current = null;
+            if (speechRun !== speechRunRef.current) return;
+            const source = context.createBufferSource();
+            source.buffer = buffer;
+            source.connect(context.destination);
+            playbackSourceRef.current = source;
+            await new Promise<void>((resolve) => {
+              source.addEventListener("ended", () => resolve(), { once: true });
+              source.start();
+            });
+            playbackSourceRef.current = null;
+          } else {
+            const url = URL.createObjectURL(blob);
+            audioUrlRef.current = url;
+            const audio = new Audio(url);
+            audioRef.current = audio;
+            await new Promise<void>((resolve, reject) => {
+              audio.addEventListener("ended", () => resolve(), { once: true });
+              audio.addEventListener(
+                "error",
+                () => reject(new Error("Generated speech could not play.")),
+                { once: true },
+              );
+              audio.play().catch(reject);
+            });
+            audioRef.current = null;
+            URL.revokeObjectURL(url);
+            audioUrlRef.current = null;
+          }
+          if (speechRun !== speechRunRef.current) return;
+          speechAbortRef.current = null;
+          setState("idle");
+          return;
         }
-        if (speechRun !== speechRunRef.current) return;
-        speechAbortRef.current = null;
-        setState("idle");
-        return;
+      } catch {
+        // Browser speech below is the no-network and autoplay-safe fallback.
       }
-    } catch {
-      // Browser speech below is the no-network and autoplay-safe fallback.
     }
     if (speechRun !== speechRunRef.current) return;
     if (
@@ -240,17 +244,29 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       setState("idle");
       return;
     }
+    const browserVoice = selectBrowserVoice(
+      await loadBrowserVoices(window.speechSynthesis),
+      locale,
+    );
+    if (speechRun !== speechRunRef.current) return;
     await new Promise<void>((resolve) => {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.92;
+      utterance.rate = locale === "zh-CN" ? 1 : 1.02;
       utterance.pitch = 1;
       utterance.lang = locale;
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
+      if (browserVoice) utterance.voice = browserVoice;
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
       utteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
-      window.setTimeout(resolve, Math.max(4_000, text.length * 85));
+      window.setTimeout(finish, Math.max(4_000, text.length * 85));
     });
     if (speechRun !== speechRunRef.current) return;
     utteranceRef.current = null;
@@ -403,6 +419,58 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
     speak,
     state,
   };
+}
+
+export function selectBrowserVoice(
+  voices: readonly SpeechSynthesisVoice[],
+  locale: SupportedLocale,
+): SpeechSynthesisVoice | undefined {
+  const normalizedLocale = normalizeSpeechLocale(locale);
+  const language = normalizedLocale.split("-")[0];
+
+  return voices
+    .map((voice) => {
+      const voiceLocale = normalizeSpeechLocale(voice.lang);
+      let score = 0;
+      if (voiceLocale === normalizedLocale) score += 100;
+      else if (voiceLocale.split("-")[0] === language) score += 50;
+      else return { score: -1, voice };
+
+      if (voice.localService) score += 8;
+      if (/\bnatural\b/i.test(voice.name)) score += 4;
+      if (/\bmicrosoft\b/i.test(voice.name)) score += 2;
+      if (voice.default) score += 1;
+      return { score, voice };
+    })
+    .filter(({ score }) => score >= 0)
+    .sort((a, b) => b.score - a.score)[0]?.voice;
+}
+
+async function loadBrowserVoices(
+  speechSynthesis: SpeechSynthesis,
+): Promise<SpeechSynthesisVoice[]> {
+  if (typeof speechSynthesis.getVoices !== "function") return [];
+
+  const loaded = speechSynthesis.getVoices();
+  if (loaded.length || typeof speechSynthesis.addEventListener !== "function") {
+    return loaded;
+  }
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    speechSynthesis.addEventListener("voiceschanged", finish, { once: true });
+    window.setTimeout(finish, 350);
+  });
+  return speechSynthesis.getVoices();
+}
+
+function normalizeSpeechLocale(locale: string) {
+  return locale.trim().replaceAll("_", "-").toLowerCase();
 }
 
 function startSilenceMeter({

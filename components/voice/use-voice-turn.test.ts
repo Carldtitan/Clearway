@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldFinishRecording } from "@/components/voice/use-voice-turn";
+import {
+  selectBrowserVoice,
+  shouldFinishRecording,
+} from "@/components/voice/use-voice-turn";
 
 describe("continuous microphone turn detection", () => {
   it("waits indefinitely until the applicant starts speaking", () => {
@@ -63,3 +66,49 @@ describe("continuous microphone turn detection", () => {
     ).toBe(true);
   });
 });
+
+describe("browser voice selection", () => {
+  it("selects an exact Mandarin voice instead of an English default", () => {
+    const english = voice({ default: true, lang: "en-US", name: "Microsoft Aria" });
+    const mandarin = voice({
+      lang: "zh-CN",
+      localService: true,
+      name: "Microsoft Xiaoxiao Natural",
+    });
+
+    expect(selectBrowserVoice([english, mandarin], "zh-CN")).toBe(mandarin);
+  });
+
+  it("uses a same-language voice when an exact regional voice is unavailable", () => {
+    const traditionalChinese = voice({
+      lang: "zh-TW",
+      name: "Microsoft HsiaoChen",
+    });
+
+    expect(selectBrowserVoice([traditionalChinese], "zh-CN")).toBe(
+      traditionalChinese,
+    );
+  });
+
+  it("never substitutes an unrelated language", () => {
+    expect(
+      selectBrowserVoice(
+        [voice({ lang: "en-US", name: "Microsoft Aria" })],
+        "zh-CN",
+      ),
+    ).toBeUndefined();
+  });
+});
+
+function voice(
+  overrides: Partial<SpeechSynthesisVoice>,
+): SpeechSynthesisVoice {
+  return {
+    default: false,
+    lang: "en-US",
+    localService: true,
+    name: "Test voice",
+    voiceURI: "test-voice",
+    ...overrides,
+  };
+}

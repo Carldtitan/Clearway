@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import type { SupportedLocale } from "@/lib/case/types";
-import { localeDefinition } from "@/lib/i18n/locales";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,6 +10,13 @@ const speakRequestSchema = z.object({
   text: z.string().trim().min(1).max(1_500),
   locale: z.enum(["en-US", "es-US", "zh-CN"]).default("en-US"),
 });
+
+type DeepgramSpeechLocale = Exclude<SupportedLocale, "zh-CN">;
+
+const DEFAULT_DEEPGRAM_TTS_MODELS: Record<DeepgramSpeechLocale, string> = {
+  "en-US": "aura-2-thalia-en",
+  "es-US": "aura-2-estrella-es",
+};
 
 export async function POST(request: Request) {
   const parsed = speakRequestSchema.safeParse(await safeJson(request));
@@ -23,12 +29,21 @@ export async function POST(request: Request) {
     );
   }
 
-  const voiceId = voiceIdFor(parsed.data.locale);
-  if (
-    process.env.TTS_PROVIDER !== "elevenlabs" ||
-    !process.env.ELEVENLABS_API_KEY ||
-    !voiceId
-  ) {
+  const { locale, text } = parsed.data;
+  if (locale === "zh-CN") {
+    return noStore(
+      NextResponse.json(
+        {
+          error:
+            "Mandarin speech uses the matching voice installed in the browser.",
+          fallback: "browser",
+        },
+        { status: 422 },
+      ),
+    );
+  }
+
+  if (!process.env.DEEPGRAM_API_KEY) {
     return noStore(
       NextResponse.json(
         { error: "Server speech is not configured." },
@@ -38,29 +53,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    let response = await requestSpeech(voiceId, parsed.data.text);
-    let voiceProfile = "localized";
-
-    const fallbackVoiceId =
-      process.env.ELEVENLABS_VOICE_ID_EN ??
-      process.env.ELEVENLABS_VOICE_ID;
-    if (
-      !response.ok &&
-      parsed.data.locale !== "en-US" &&
-      fallbackVoiceId &&
-      fallbackVoiceId !== voiceId &&
-      isUnavailableVoice(response.status)
-    ) {
-      console.warn("ElevenLabs localized voice unavailable; using the multilingual fallback", {
-        locale: parsed.data.locale,
-        status: response.status,
-      });
-      response = await requestSpeech(fallbackVoiceId, parsed.data.text);
-      voiceProfile = "multilingual-fallback";
-    }
-
+    const response = await requestSpeech(locale, text);
     if (!response.ok) {
-      console.error("ElevenLabs speech failed", { status: response.status });
+      console.error("Deepgram speech failed", { status: response.status });
       return noStore(
         NextResponse.json(
           { error: "Server speech is temporarily unavailable." },
@@ -68,19 +63,21 @@ export async function POST(request: Request) {
         ),
       );
     }
+
     const audio = await response.arrayBuffer();
     return new Response(audio, {
       status: 200,
       headers: {
         "Cache-Control": "no-store, max-age=0",
-        "Content-Language": parsed.data.locale,
+        "Content-Language": locale,
         "Content-Type": response.headers.get("Content-Type") || "audio/mpeg",
         "Content-Length": String(audio.byteLength),
-        "X-Voice-Profile": voiceProfile,
+        "X-TTS-Provider": "deepgram",
+        "X-Voice-Profile": "deepgram-aura-2",
       },
     });
   } catch (error) {
-    console.error("ElevenLabs speech failed", {
+    console.error("Deepgram speech failed", {
       errorType: error instanceof Error ? error.name : "UnknownError",
     });
     return noStore(
@@ -92,45 +89,38 @@ export async function POST(request: Request) {
   }
 }
 
-function voiceIdFor(locale: SupportedLocale): string | undefined {
-  const definition = localeDefinition(locale);
-  const configured = process.env[definition.voiceEnvironmentKey];
-  if (configured) return configured;
-  if (locale === "en-US") return process.env.ELEVENLABS_VOICE_ID;
-  if (locale === "es-US") return "KHCvMklQZZo0O30ERnVn";
-  return "bhJUNIXWQQ94l8eI2VUf";
-}
+function requestSpeech(locale: DeepgramSpeechLocale, text: string) {
+  const model =
+    locale === "en-US"
+      ? process.env.DEEPGRAM_TTS_MODEL_EN ||
+        DEFAULT_DEEPGRAM_TTS_MODELS["en-US"]
+      : process.env.DEEPGRAM_TTS_MODEL_ES ||
+        DEFAULT_DEEPGRAM_TTS_MODELS["es-US"];
+  const url = new URL("https://api.deepgram.com/v1/speak");
+  url.searchParams.set("model", model);
+  url.searchParams.set("encoding", "mp3");
+  url.searchParams.set("speed", deepgramSpeechSpeed());
+  url.searchParams.set("mip_opt_out", "true");
 
-function requestSpeech(voiceId: string, text: string) {
-  return fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
-      voiceId,
-    )}?output_format=mp3_44100_128&enable_logging=false`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "audio/mpeg",
-        "Content-Type": "application/json",
-        "xi-api-key": process.env.ELEVENLABS_API_KEY!,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
-        voice_settings: {
-          stability: 0.55,
-          similarity_boost: 0.75,
-          style: 0.1,
-          use_speaker_boost: true,
-        },
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "audio/mpeg",
+      Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({ text }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(12_000),
+  });
 }
 
-function isUnavailableVoice(status: number) {
-  return status === 402 || status === 403 || status === 404 || status === 422;
+function deepgramSpeechSpeed() {
+  const configured = Number(process.env.DEEPGRAM_TTS_SPEED);
+  if (Number.isFinite(configured) && configured >= 0.7 && configured <= 1.5) {
+    return String(configured);
+  }
+  return "1.08";
 }
 
 async function safeJson(request: Request): Promise<unknown> {

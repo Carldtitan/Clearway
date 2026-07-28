@@ -380,7 +380,7 @@ RUNTIME (automated)  voice transcript
 | Framework | **Next.js** (App Router) |
 | Hosting | **Vercel** — serverless functions keep the Anvil key server-side |
 | Speech → text | **Deepgram** (or browser Web Speech API for zero setup) |
-| Text → speech | **ElevenLabs** |
+| Text → speech | **Deepgram Aura 2** for English and Spanish; matched browser voice for Mandarin |
 | Avatar | **Simli** / **Tavus** real-time, or **HeyGen** pre-rendered |
 | PDF | **Anvil** via `node-anvil` |
 | State | In-memory / React state — **no database** |

@@ -8,27 +8,12 @@ afterEach(() => {
 });
 
 describe("POST /api/speak", () => {
-  it("keeps the selected language when a paid localized voice is unavailable", async () => {
-    vi.stubEnv("TTS_PROVIDER", "elevenlabs");
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    vi.stubEnv("ELEVENLABS_VOICE_ID_EN", "english-account-voice");
-    vi.stubEnv("ELEVENLABS_VOICE_ID_ES", "spanish-library-voice");
-    vi.stubEnv("ELEVENLABS_MODEL", "eleven_multilingual_v2");
+  it("uses Deepgram Aura for English speech", async () => {
+    vi.stubEnv("DEEPGRAM_API_KEY", "test-key");
 
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            detail: { code: "paid_plan_required" },
-          }),
-          {
-            status: 402,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
+      .mockResolvedValue(
         new Response(Uint8Array.from([1, 2, 3]), {
           status: 200,
           headers: { "Content-Type": "audio/mpeg" },
@@ -37,31 +22,33 @@ describe("POST /api/speak", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await POST(
-      new Request("http://localhost/api/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "¿Cómo se llama?", locale: "es-US" }),
-      }),
+      speakRequest({ text: "What is your name?", locale: "en-US" }),
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Language")).toBe("es-US");
-    expect(response.headers.get("X-Voice-Profile")).toBe(
-      "multilingual-fallback",
+    expect(response.headers.get("Content-Language")).toBe("en-US");
+    expect(response.headers.get("X-TTS-Provider")).toBe("deepgram");
+    expect(response.headers.get("X-Voice-Profile")).toBe("deepgram-aura-2");
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    const [url, options] = fetchMock.mock.calls[0]!;
+    const requestUrl = new URL(String(url));
+    expect(requestUrl.origin + requestUrl.pathname).toBe(
+      "https://api.deepgram.com/v1/speak",
     );
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
-      "spanish-library-voice",
-    );
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
-      "english-account-voice",
-    );
+    expect(requestUrl.searchParams.get("model")).toBe("aura-2-thalia-en");
+    expect(requestUrl.searchParams.get("speed")).toBe("1.08");
+    expect(requestUrl.searchParams.get("mip_opt_out")).toBe("true");
+    expect(options?.headers).toMatchObject({
+      Authorization: "Token test-key",
+      "Content-Type": "application/json",
+    });
+    expect(options?.body).toBe(JSON.stringify({ text: "What is your name?" }));
   });
 
-  it("uses the configured English voice without retrying", async () => {
-    vi.stubEnv("TTS_PROVIDER", "elevenlabs");
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    vi.stubEnv("ELEVENLABS_VOICE_ID_EN", "english-account-voice");
+  it("uses a Spanish Aura voice without switching the response language", async () => {
+    vi.stubEnv("DEEPGRAM_API_KEY", "test-key");
+    vi.stubEnv("DEEPGRAM_TTS_MODEL_ES", "aura-2-estrella-es");
 
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -74,15 +61,49 @@ describe("POST /api/speak", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await POST(
-      new Request("http://localhost/api/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "What is your name?", locale: "en-US" }),
-      }),
+      speakRequest({ text: "¿Cómo se llama?", locale: "es-US" }),
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("X-Voice-Profile")).toBe("localized");
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(response.headers.get("Content-Language")).toBe("es-US");
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(new URL(String(url)).searchParams.get("model")).toBe(
+      "aura-2-estrella-es",
+    );
+  });
+
+  it("routes Mandarin to the browser without calling a server provider", async () => {
+    vi.stubEnv("DEEPGRAM_API_KEY", "test-key");
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      speakRequest({ text: "您好", locale: "zh-CN" }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ fallback: "browser" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reports unavailable server speech when the Deepgram key is absent", async () => {
+    vi.stubEnv("DEEPGRAM_API_KEY", "");
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      speakRequest({ text: "Hello", locale: "en-US" }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+function speakRequest(body: { text: string; locale: string }) {
+  return new Request("http://localhost/api/speak", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}

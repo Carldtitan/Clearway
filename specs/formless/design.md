@@ -41,7 +41,7 @@ The central architectural boundary is **deterministic rules and canonical data i
 | Runtime validation | Zod |
 | Document generation | Anvil Node SDK, server-side only |
 | Speech-to-text | Deepgram streaming adapter; browser SpeechRecognition fallback |
-| Text-to-speech | Browser `speechSynthesis`; optional ElevenLabs adapter |
+| Text-to-speech | Deepgram Aura 2 for English and Spanish; matched browser `speechSynthesis` voice for Mandarin |
 | Natural-language extraction | Environment-selected LLM behind a schema-constrained adapter |
 | Evidence PDF | Server-rendered semantic HTML converted to PDF |
 | Unit/property testing | Vitest and fast-check |
@@ -147,7 +147,7 @@ type VoiceCommand =
   | "mark_received";
 ```
 
-The locale registry owns native labels, localized fixed interface copy, Deepgram model/language values, ElevenLabs voice environment keys, and browser speech locale. English uses `nova-3-medical` with `en-US`; Spanish and Mandarin use general `nova-3` with `es` and `zh-CN`.
+The locale registry owns native labels, localized fixed interface copy, Deepgram model/language values, and browser speech locale. English transcription uses `nova-3-medical` with `en-US`; Spanish and Mandarin transcription use general `nova-3` with `es` and `zh-CN`. English speech uses Deepgram Aura 2 Thalia, Spanish speech uses Aura 2 Estrella, and Mandarin speech explicitly selects an installed `zh-CN` browser voice before considering another Chinese regional voice.
 
 The Question Registry is pure data. Each entry declares requirement level, condition, whether unknown is allowed, whether unresolved state blocks packet generation, canonical targets, and localized prompt, confirmation, and explanation. The Completion Engine consumes the same registry on the client and packet server. It returns stable issue IDs, labels in the active locale, paths, and severity.
 
@@ -244,7 +244,7 @@ graph TD
 
     subgraph Services["External Adapters"]
         STT[Deepgram / browser STT]
-        TTS[Browser / ElevenLabs TTS]
+        TTS[Deepgram Aura / Mandarin browser TTS]
         LLM[Schema extraction LLM]
         Anvil[Anvil PDF API]
         PDF[HTML-to-PDF]
@@ -390,7 +390,7 @@ lib/
     deepgram.ts
     browser-stt.ts
     browser-tts.ts
-    elevenlabs.ts
+    deepgram-tts.ts
   forms/
     contract.ts
     ssa16.ts

@@ -78,7 +78,7 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 
 1. THE Formless SHALL support `en-US`, `es-US`, and `zh-CN` Conversation_Locales.
 2. THE Speech_To_Text adapter SHALL use the configured locale for every recording and SHALL use an English medical model only for English.
-3. THE Text_To_Speech adapter SHALL use a locale-specific voice and multilingual synthesis model.
+3. THE Text_To_Speech adapter SHALL use Deepgram Aura 2 with locale-specific voices for English and Spanish and SHALL explicitly select an installed `zh-CN` browser voice for Mandarin before considering another Chinese regional voice.
 4. THE Extraction_Adapter SHALL preserve the Original_Transcript and SHALL produce English canonical values for English SSA forms.
 5. THE Extraction_Adapter SHALL preserve legal names, addresses, identifiers, numbers, and dates without translating their semantic content.
 6. THE Formless SHALL confirm extracted meaning and ask follow-up questions in the active Conversation_Locale.

@@ -41,7 +41,7 @@ The domain layer owns public contracts. Feature and integration work must consum
 - [x] C. Implement language-first voice
   - [x] C.1 Render English, Español, and 中文（普通话） as the first and only initial decision.
   - [x] C.2 Begin the localized spoken preparation introduction immediately after selection.
-  - [x] C.3 Route every recording through the locale-specific Deepgram model and every response through the locale-specific ElevenLabs voice.
+  - [x] C.3 Route every recording through the locale-specific Deepgram model, English and Spanish responses through Deepgram Aura 2, and Mandarin responses through a matching installed browser voice.
   - [x] C.4 Preserve original transcripts, extract English SSA values, and confirm meaning in the selected language.
   - [x] C.5 Support changing language mid-conversation without losing progress or silently returning to English.
   - _Requirements: 1A, 1D, 3, 5, 14_
@@ -56,7 +56,7 @@ The domain layer owns public contracts. Feature and integration work must consum
   - [x] E.1 Add unit tests for locale selection, commands, requirements, completeness, translation boundaries, and document readiness.
   - [x] E.2 Add component and integration tests for the three localized introductions, required-answer behavior, commands, provider failures, and packet blocking.
   - [x] E.3 Add voice-controlled browser paths for all three locales, Documents, and Records.
-  - [x] E.4 Run live Deepgram, ElevenLabs, Anvil, accessibility, responsive, build, and Impeccable quality checks.
+  - [x] E.4 Run live Deepgram speech, Anvil, accessibility, responsive, build, and Impeccable quality checks.
   - _Requirements: 1A–1D, 13–15_
 
 - [x] F. Make the guided application conversational
@@ -287,7 +287,7 @@ The domain layer owns public contracts. Feature and integration work must consum
 
   - [ ] 7.2 Implement speech output
     - Add browser speechSynthesis as the default `SpeechOutputAdapter`.
-    - Add the optional ElevenLabs server adapter without making it required.
+    - Add the Deepgram Aura server adapter for English and Spanish while preserving a no-network browser fallback.
     - Implement replay and stop.
     - Preserve visible prompts when audio is unsupported or fails.
     - _Requirements: 3.2, 3.10, 14.6_

@@ -323,7 +323,8 @@ The tracker spans 30+ days and cannot live in a browser session. Two explicitly 
 |---|---|---|
 | **Anvil** | PDF fill, generation, templates | No documents produced — hard dependency |
 | **Deepgram** or Web Speech API | Speech → text | Fall back to typed input |
-| **ElevenLabs** | Text → speech | Fall back to on-screen text |
+| **Deepgram Aura 2** | English and Spanish text → speech | Fall back to the matching browser voice and on-screen text |
+| **Browser speech synthesis** | Mandarin text → speech | Require an installed Chinese voice or continue with on-screen text |
 | **LLM provider** | Speech → field mapping; evidence relevance | Fall back to typed form |
 | **Vercel** | Hosting, serverless functions | — |
 | Twilio *(V2)* | SMS, assisted calling | Feature unavailable; on-screen reminders continue |

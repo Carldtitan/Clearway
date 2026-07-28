@@ -104,7 +104,8 @@ ANTHROPIC_API_KEY=sk-ant-<...>
 
 ## 3 · Deepgram — 1 key
 
-Used for speech → text.
+Used for speech recognition in all three languages and speech output in
+English and Spanish. Mandarin speech output uses the matching browser voice.
 
 1. Go to **console.deepgram.com** and sign up
 2. Check what signup credit you're offered — **don't assume it's free.** Streaming runs ~$0.0077/min, so even paid, a hackathon costs cents
@@ -115,9 +116,15 @@ Used for speech → text.
 DEEPGRAM_API_KEY=<paste here>
 ```
 
-`DEEPGRAM_MODEL` is already set to `nova-3-medical`. Leave it — that's the medical model, and it's the reason we're paying for this instead of using the browser.
+`DEEPGRAM_MODEL` is already set to `nova-3-medical`. Leave it — that's the
+English medical transcription model. Spanish and Mandarin automatically use
+the general multilingual model.
 
 `DEEPGRAM_KEYTERMS_FILE` points at `config/keyterms.txt`, which already exists with ~100 common medication and condition terms preloaded.
+
+English speech uses `aura-2-thalia-en`, Spanish uses
+`aura-2-estrella-es`, and both default to `1.08` speed. The corresponding
+`DEEPGRAM_TTS_*` values are optional overrides rather than additional keys.
 
 ---
 
@@ -126,8 +133,7 @@ DEEPGRAM_API_KEY=<paste here>
 | Key | What to do |
 |---|---|
 | `STT_PROVIDER` | Already `deepgram`. Leave it |
-| `TTS_PROVIDER` | Already `browser`. **Free, no key, works everywhere** |
-| `ELEVENLABS_*` | **Leave blank.** V2 only |
+| `DEEPGRAM_TTS_*` | Optional Aura voice and speed overrides; the defaults are ready |
 | `SGA_*`, `EARNINGS_*`, `HIPAA_*`, `SSA827_*`, `TRACKER_*` | Already filled with verified 2026 values. Don't touch |
 | `TWILIO_*` | **Leave blank.** V2 |
 | `AVATAR_*` | **Leave blank.** V2 |
