@@ -7,7 +7,7 @@ export type YesNoResult =
 const yesPatterns: Record<SupportedLocale, RegExp> = {
   "en-US": /\b(?:yes|yeah|yep|correct|right|i am|i do|that is right)\b/i,
   "es-US":
-    /\b(?:sí|si|correcto|correcta|así es|estoy listo|estoy lista|de acuerdo)\b/i,
+    /\b(?:si|correcto|correcta|asi es|estoy listo|estoy lista|de acuerdo)\b/i,
   "zh-CN": /(?:是|对|正确|没错|可以|好的|我准备好了)/,
 };
 
@@ -21,7 +21,7 @@ export function parseLocalizedYesNo(
   transcript: string,
   locale: SupportedLocale,
 ): YesNoResult {
-  const value = transcript.trim();
+  const value = comparableText(transcript, locale);
   if (noPatterns[locale].test(value)) {
     return { ok: true, value: false, spoken: noWord(locale) };
   }
@@ -39,10 +39,10 @@ export function explicitNone(
     "en-US":
       /^(?:none|no|no more|no more providers|no more jobs|nobody else|no one else|that is all|that's all)$/i,
     "es-US":
-      /^(?:ninguno|ninguna|no|no hay más|no hay más proveedores|no hay más trabajos|eso es todo)$/i,
+      /^(?:ninguno|ninguna|no|no hay mas|no hay mas proveedores|no hay mas trabajos|eso es todo)$/i,
     "zh-CN": /^(?:没有|没有了|没有其他|没有其他医疗机构|没有其他工作|就这些)$/,
   };
-  return patterns[locale].test(transcript.trim());
+  return patterns[locale].test(comparableText(transcript, locale));
 }
 
 export function readyAnswer(
@@ -56,7 +56,7 @@ export function readyAnswer(
         "en-US": /\b(?:ready|begin|start)\b/i,
         "es-US": /\b(?:listo|lista|comenzar|empezar)\b/i,
         "zh-CN": /(?:准备好了|开始)/,
-      }[locale].test(transcript);
+      }[locale].test(comparableText(transcript, locale));
 }
 
 export function confirmationPrompt(
@@ -85,4 +85,14 @@ export function yesWord(locale: SupportedLocale): string {
 
 export function noWord(locale: SupportedLocale): string {
   return { "en-US": "no", "es-US": "no", "zh-CN": "不是" }[locale];
+}
+
+function comparableText(
+  transcript: string,
+  locale: SupportedLocale,
+): string {
+  const value = transcript.trim();
+  return locale === "es-US"
+    ? value.normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    : value;
 }

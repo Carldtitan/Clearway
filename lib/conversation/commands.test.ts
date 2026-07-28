@@ -6,6 +6,7 @@ describe("voice command parser", () => {
   it.each([
     ["skip", "defer"],
     ["I don't know", "defer"],
+    ["No sé", "defer"],
     ["disregard that", "correct"],
     ["repita", "repeat"],
     ["暂停", "pause"],
@@ -17,6 +18,7 @@ describe("voice command parser", () => {
   it.each([
     ["switch to Spanish", "es-US"],
     ["hablar inglés", "en-US"],
+    ["hablar ingles", "en-US"],
     ["切换到中文", "zh-CN"],
   ])("detects a language change in %s", (transcript, locale) => {
     expect(parseVoiceCommand(transcript)?.targetLocale).toBe(locale);

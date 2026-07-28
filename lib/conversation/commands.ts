@@ -134,11 +134,7 @@ export function parseVoiceCommand(
   _locale?: SupportedLocale,
 ): ParsedVoiceCommand | null {
   void _locale;
-  const normalized = transcript
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/[“”"'’.,!?¿¡。！？]/g, "")
-    .replace(/\s+/g, " ");
+  const normalized = normalizeCommandText(transcript);
 
   const targetLocale = languageTarget(normalized);
   if (targetLocale) {
@@ -155,8 +151,13 @@ export function parseVoiceCommand(
   >) {
     if (
       candidates.some(
-        (candidate) =>
-          normalized === candidate || normalized.startsWith(`${candidate} `),
+        (candidate) => {
+          const normalizedCandidate = normalizeCommandText(candidate);
+          return (
+            normalized === normalizedCandidate ||
+            normalized.startsWith(`${normalizedCandidate} `)
+          );
+        },
       )
     ) {
       return {
@@ -165,7 +166,7 @@ export function parseVoiceCommand(
         destructive: command === "correct" || command === "mark_received",
         deferReason:
           command === "defer"
-            ? /dont know|do not know|no sé|不知道/.test(normalized)
+            ? /dont know|do not know|no se|不知道/.test(normalized)
               ? "unknown"
               : "come_back_later"
             : undefined,
@@ -177,25 +178,35 @@ export function parseVoiceCommand(
 
 function languageTarget(value: string): SupportedLocale | null {
   if (
-    /(?:switch|change|speak).*(?:english)|(?:cambiar|hablar).*(?:inglés)|说英语|切换.*英语/.test(
+    /(?:switch|change|speak).*(?:english)|(?:cambiar|hablar).*(?:ingles)|说英语|切换.*英语/.test(
       value,
     )
   ) {
     return "en-US";
   }
   if (
-    /(?:switch|change|speak).*(?:spanish)|(?:cambiar|hablar).*(?:español)|说西班牙语|切换.*西班牙语/.test(
+    /(?:switch|change|speak).*(?:spanish)|(?:cambiar|hablar).*(?:espanol)|说西班牙语|切换.*西班牙语/.test(
       value,
     )
   ) {
     return "es-US";
   }
   if (
-    /(?:switch|change|speak).*(?:mandarin|chinese)|(?:cambiar|hablar).*(?:mandarín|chino)|说中文|切换.*中文/.test(
+    /(?:switch|change|speak).*(?:mandarin|chinese)|(?:cambiar|hablar).*(?:mandarin|chino)|说中文|切换.*中文/.test(
       value,
     )
   ) {
     return "zh-CN";
   }
   return null;
+}
+
+function normalizeCommandText(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[“”"'’.,!?¿¡。！？]/g, "")
+    .replace(/\s+/g, " ");
 }
