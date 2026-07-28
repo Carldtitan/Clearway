@@ -44,6 +44,27 @@ describe("deterministic core", () => {
     expect(action.deadline).toBe("2026-08-05");
   });
 
+  it("honors a written access extension before escalating", () => {
+    const extendedRequest = {
+      ...structuredClone(syntheticApplicant.recordRequests[1]),
+      extensionNoticeAt: "2026-07-30",
+    };
+    const beforeExtendedDeadline = evaluateRecordRequest(
+      extendedRequest,
+      "2026-08-12",
+      TRACKER_CONFIG,
+    );
+    const afterExtendedDeadline = evaluateRecordRequest(
+      extendedRequest,
+      "2026-09-04",
+      TRACKER_CONFIG,
+    );
+
+    expect(beforeExtendedDeadline.state).toBe("day_20");
+    expect(beforeExtendedDeadline.deadline).toBe("2026-09-04");
+    expect(afterExtendedDeadline.state).toBe("day_30");
+  });
+
   it("warns about the seeded SSA-827 at eleven months", () => {
     expect(
       authorizationWarningDue(

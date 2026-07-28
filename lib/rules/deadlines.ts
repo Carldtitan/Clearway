@@ -58,7 +58,10 @@ export function evaluateRecordRequest(
 
   const deadline = deadlineFor(request, config);
   const elapsed = daysBetween(request.requestedAt, today);
-  if (elapsed >= config.escalationDay) {
+  const escalationDay = request.extensionNoticeAt
+    ? config.accessDeadlineDays + config.allowedExtensionDays
+    : config.escalationDay;
+  if (elapsed >= escalationDay) {
     return {
       state: "day_30",
       deadline,
