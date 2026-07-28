@@ -54,11 +54,13 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 7. THE Formless SHALL support repeat, explain, pause, continue, go back, correct, defer, status, change language, review, generate packet, download packet, open records, and mark received by voice.
 8. IF a command changes or removes confirmed information, THEN THE Formless SHALL identify the target and obtain confirmation before applying the command.
 9. WHEN one applicant answer explicitly supplies facts for multiple active questions, THE Conversation_Orchestrator SHALL extract every supported fact and SHALL NOT ask a later question whose canonical target is already resolved.
-10. WHEN an ordinary answer can be reflected safely, THE Conversation_Orchestrator SHALL combine a brief declarative readback with the next relevant question and SHALL NOT require a separate yes/no turn.
-11. WHEN the applicant answers the next question without correcting the readback, THE Conversation_Orchestrator SHALL treat the prior readback as accepted; IF the applicant corrects it, THEN THE prior candidate SHALL remain unsaved and the correction SHALL be resolved before continuing.
-12. WHEN the latest answer lacks a detail required for the active question, THE Conversation_Orchestrator SHALL ask one context-specific follow-up instead of restarting the original question.
-13. THE Conversation_Orchestrator SHALL supply up to the 24 most recent confirmed Interview_Turn pairs to extraction and SHALL exclude rejected or failed answers from that context.
-14. THE Voice_Interview SHALL accept a spoken answer lasting up to 120 seconds and SHALL allow a pause of at least 1.8 seconds inside an answer lasting at least 8 seconds without ending the turn.
+10. WHEN speech transcription completes, THE Conversation_Orchestrator SHALL immediately speak a short localized acknowledgement while structured extraction is running.
+11. WHEN extraction completes, THE Conversation_Orchestrator SHALL read the interpreted answer back in the active language, ask whether it is correct, and SHALL NOT save the candidate or ask the next application question until the applicant confirms it.
+12. WHEN the applicant rejects a readback, THE Conversation_Orchestrator SHALL leave the prior candidate unsaved, accept a correction in the applicant's own words, and confirm the replacement before continuing.
+13. WHEN a confirmed answer supplies facts for multiple active questions, THE Conversation_Orchestrator SHALL commit all supported facts together and skip the registry questions those facts resolve.
+14. WHEN the latest answer lacks a detail required for the active question, THE Conversation_Orchestrator SHALL ask one context-specific follow-up after confirming the interpreted partial answer instead of restarting the original question.
+15. THE Conversation_Orchestrator SHALL supply up to the 24 most recent confirmed Interview_Turn pairs to extraction and SHALL exclude rejected or failed answers from that context.
+16. THE Voice_Interview SHALL accept a spoken answer lasting up to 120 seconds, SHALL use detected speech followed by adaptive silence to end a turn, and SHALL retain a visible finish control for applicants who need more time.
 
 #### Requirement 1C: Deterministic completion
 

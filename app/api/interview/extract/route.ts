@@ -36,7 +36,7 @@ Rules:
 - summary must be a concise English statement of the facts that will be stored in English SSA form fields.
 - acknowledgement, confirmationText, and followUpQuestion must use the requested conversation language.
 - acknowledgement is a warm, factual response of at most twelve words. Do not praise the applicant, use filler, or ask a question.
-- confirmationText is a brief declarative readback. Do not require a separate yes/no response after ordinary answers.
+- confirmationText is a brief, natural readback question in the requested language. State the interpreted value and ask whether it is exactly right. Do not ask for missing details there; use followUpQuestion for missing details.
 - answerComplete is true when the latest answer and the supplied conversation context provide enough information to answer the current question.
 - When answerComplete is false, followUpQuestion asks one short, specific question that obtains the missing detail. Otherwise followUpQuestion is an empty string.
 - Use the supplied conversation history to resolve references such as "that doctor", "the same medicine", or "back then".

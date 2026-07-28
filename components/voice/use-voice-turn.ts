@@ -13,9 +13,10 @@ export type VoiceTurnState =
   | "processing"
   | "error";
 
-const SILENCE_AFTER_SPEECH_MS = 1_350;
+const SILENCE_AFTER_SPEECH_MS = 950;
 const SILENCE_AFTER_LONG_ANSWER_MS = 2_200;
 const LONG_ANSWER_MS = 8_000;
+const MIN_ANSWER_MS = 1_250;
 const MAX_ANSWER_MS = 120_000;
 const SPEECH_LEVEL = 0.022;
 
@@ -484,7 +485,7 @@ export function shouldFinishRecording({
       ? SILENCE_AFTER_LONG_ANSWER_MS
       : SILENCE_AFTER_SPEECH_MS;
   return (
-    (elapsedMs >= 1_800 && silenceMs >= silenceThreshold) ||
+    (elapsedMs >= MIN_ANSWER_MS && silenceMs >= silenceThreshold) ||
     elapsedMs >= MAX_ANSWER_MS
   );
 }

@@ -207,12 +207,14 @@ test("a rejected voice answer becomes a correction turn", async ({ page }) => {
   expect(transcripts).toEqual([]);
 });
 
-test("a substantive next answer accepts the prior readback", async ({ page }) => {
+test("spoken candidates require confirmation before the next question", async ({ page }) => {
   await installSyntheticMicrophone(page);
   const transcripts = [
     "I'm ready",
     "Ana Rivera",
+    "yes",
     "000-12-3456",
+    "yes",
     "pause",
   ];
   const spokenPrompts: string[] = [];
@@ -280,9 +282,16 @@ test("a substantive next answer accepts the prior readback", async ({ page }) =>
   ).toBeVisible();
   expect(
     spokenPrompts.some((prompt) =>
-      prompt.includes("Please say yes if that is correct"),
+      prompt.includes(
+        "I heard your full legal name as Ana Rivera. Is that exactly right?",
+      ),
     ),
-  ).toBe(false);
+  ).toBe(true);
+  expect(
+    spokenPrompts.some((prompt) =>
+      prompt.includes("I heard: 000-12-3456. Is that correct?"),
+    ),
+  ).toBe(true);
   expect(transcripts).toEqual([]);
 });
 

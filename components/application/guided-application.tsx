@@ -409,12 +409,32 @@ export function GuidedApplication() {
     setError(null);
 
     try {
-      const nextPending = await prepareAnswer(
+      const preparation = prepareAnswer(
         question,
         transcript,
         source,
         turnId,
       );
+      let acknowledgement: Promise<void> | null = null;
+      const acknowledgementTimer =
+        source === "voice"
+          ? window.setTimeout(() => {
+              acknowledgement = voice.speak(
+                processingAcknowledgement(question, locale),
+              );
+            }, 250)
+          : null;
+      let nextPending: PendingAnswer;
+      try {
+        nextPending = await preparation;
+      } finally {
+        if (acknowledgementTimer !== null) {
+          window.clearTimeout(acknowledgementTimer);
+        }
+      }
+      if (acknowledgement) {
+        await acknowledgement;
+      }
       setPending(nextPending);
       setStatus("confirming");
       if (source === "voice") {
@@ -637,34 +657,33 @@ export function GuidedApplication() {
     const next = followUp
       ? answer.question
       : nextQuestionForCase(preview);
-
-    if (!next) {
-      commitPending(answer);
-      await voice.speak(naturalAcknowledgement(answer, locale));
-      window.setTimeout(() => void finishIntake(), 120);
-      return;
-    }
-
-    const nextIndex = QUESTION_REGISTRY.findIndex(
-      (candidate) => candidate.id === next.id,
-    );
-    const nextPrompt = followUp
-      ? followUp
-      : next.id === answer.question.id &&
-          isCollectionQuestion(answer.question)
-        ? collectionContinuationPrompt(answer.question, locale)
-      : localized(next.prompt, locale);
-    const bridge = `${naturalAcknowledgement(answer, locale)} ${nextPrompt}`;
-    dispatch({ type: "SET_ACTIVE_QUESTION", questionId: next.id });
-    setCursor(Math.max(0, nextIndex));
+    const confirmation = explicitConfirmationPrompt(answer, locale);
     setPending(answer);
-    setRepairPrompt(bridge);
-    setStatus("asking");
+    setRepairPrompt(confirmation);
+    setStatus("confirming");
 
     try {
-      const response = await askContinuously(bridge, locale);
+      const response = await askContinuously(confirmation, locale);
+      const confirmationCommand = parseVoiceCommand(response, locale);
+      if (confirmationCommand?.command === "repeat") {
+        await continueVoiceConversation(answer);
+        return;
+      }
+      if (confirmationCommand?.command === "explain") {
+        await voice.speak(
+          localized(answer.question.explanation, locale),
+        );
+        await continueVoiceConversation(answer);
+        return;
+      }
+      if (confirmationCommand?.command === "correct") {
+        rejectPending(answer);
+        await requestVoiceCorrection(answer.question);
+        return;
+      }
       const correction = contextualCorrection(response, locale);
-      if (correction.isCorrection) {
+      const decision = parseLocalizedYesNo(response, locale);
+      if (correction.isCorrection || (decision.ok && !decision.value)) {
         rejectPending(answer);
         if (correction.replacement) {
           await voice.speak(
@@ -681,19 +700,44 @@ export function GuidedApplication() {
         return;
       }
 
-      if (!followUp && isBareAffirmation(response, locale)) {
-        commitPending(answer);
-        await askQuestion(next);
+      if (!decision.ok) {
+        rejectPending(answer);
+        await voice.speak(localized(copy.correctionAcknowledged, locale));
+        await processTranscript(answer.question, response, "voice");
         return;
       }
 
       if (followUp) {
-        await continueFollowUp(answer, response);
+        const bridge = confirmationBridge(followUp, locale);
+        setRepairPrompt(bridge);
+        setStatus("asking");
+        const detail = await askContinuously(bridge, locale);
+        await continueFollowUp(answer, detail);
         return;
       }
 
       commitPending(answer);
-      await processTranscript(next, response, "voice");
+      if (!next) {
+        await voice.speak(confirmationAccepted(locale));
+        window.setTimeout(() => void finishIntake(), 120);
+        return;
+      }
+
+      const nextIndex = QUESTION_REGISTRY.findIndex(
+        (candidate) => candidate.id === next.id,
+      );
+      const nextPrompt =
+        next.id === answer.question.id &&
+        isCollectionQuestion(answer.question)
+          ? collectionContinuationPrompt(answer.question, locale)
+          : localized(next.prompt, locale);
+      const bridge = confirmationBridge(nextPrompt, locale);
+      dispatch({ type: "SET_ACTIVE_QUESTION", questionId: next.id });
+      setCursor(Math.max(0, nextIndex));
+      setRepairPrompt(bridge);
+      setStatus("asking");
+      const nextResponse = await askContinuously(bridge, locale);
+      await processTranscript(next, nextResponse, "voice");
     } catch (conversationError) {
       setTypedMode(true);
       setStatus("error");
@@ -1033,8 +1077,7 @@ export function GuidedApplication() {
 
   const activePrompt = currentQuestion
     ? status === "confirming" && pending
-      ? pending.extraction?.confirmationText?.trim() ||
-        confirmationPrompt(pending.summary, locale)
+      ? repairPrompt ?? explicitConfirmationPrompt(pending, locale)
       : repairPrompt ?? localized(currentQuestion.prompt, locale)
     : localized(copy.introduction, locale);
 
@@ -1168,7 +1211,7 @@ export function GuidedApplication() {
             {pending && pending.source === "typed" ? (
               <div className="mt-6 border-t border-border pt-5">
                 <p className="text-sm font-bold text-muted">
-                  {confirmationPrompt(pending.summary, locale)}
+                  {explicitConfirmationPrompt(pending, locale)}
                 </p>
                 <div className="mt-4 flex gap-3">
                   <Button onClick={() => confirmTyped(true)}>
@@ -1825,36 +1868,107 @@ function nextQuestionForCase(
   );
 }
 
-function naturalAcknowledgement(
+function processingAcknowledgement(
+  question: QuestionDefinition,
+  locale: SupportedLocale,
+) {
+  const variants: Record<SupportedLocale, readonly string[]> = {
+    "en-US": [
+      "Okay, one moment.",
+      "Got it, let me make sure I heard you.",
+      "All right, give me a second.",
+    ],
+    "es-US": [
+      "Bien, un momento.",
+      "Entendido, déjeme comprobar que le escuché bien.",
+      "De acuerdo, deme un segundo.",
+    ],
+    "zh-CN": [
+      "好的，请稍等。",
+      "明白了，让我确认一下是否听对了。",
+      "好的，请给我一点时间。",
+    ],
+  };
+  const questionIndex = Math.max(
+    0,
+    QUESTION_REGISTRY.findIndex((candidate) => candidate.id === question.id),
+  );
+  const localizedVariants = variants[locale];
+  return localizedVariants[questionIndex % localizedVariants.length];
+}
+
+function explicitConfirmationPrompt(
   answer: PendingAnswer,
   locale: SupportedLocale,
 ) {
+  const legalName =
+    answer.question.id === "legal-name" &&
+    answer.extraction?.facts.length === 1
+      ? factValue(answer.extraction, "applicant.legalName")
+      : null;
+  if (legalName) {
+    return {
+      "en-US": `I heard your full legal name as ${legalName}. Is that exactly right?`,
+      "es-US": `Escuché su nombre legal completo como ${legalName}. ¿Es exactamente correcto?`,
+      "zh-CN": `我听到您的法定全名是${legalName}。完全正确吗？`,
+    }[locale];
+  }
+  if (answer.question.answerKind === "yes_no" && !answer.extraction) {
+    return {
+      "en-US": `Okay, I’m going to put that down as ${answer.summary}. Is that right?`,
+      "es-US": `De acuerdo, voy a anotar ${answer.summary}. ¿Es correcto?`,
+      "zh-CN": `好的，我会记录为${answer.summary}。这样对吗？`,
+    }[locale];
+  }
   const readback = answer.extraction?.confirmationText?.trim();
-  if (readback && !/[?？]\s*$/.test(readback)) return readback;
-  const generated = answer.extraction?.acknowledgement?.trim();
-  if (generated) return generated;
-  const summary = answer.summary.trim().replace(/[.。]+$/, "");
-  if (answer.question.answerKind === "yes_no") {
+  if (readback) {
+    if (
+      (readback.endsWith("?") || readback.endsWith("？")) &&
+      isConfirmationQuestion(readback, locale)
+    ) {
+      return readback;
+    }
+    if (readback.endsWith("?") || readback.endsWith("？")) {
+      return confirmationPrompt(answer.summary, locale);
+    }
     return {
-      "en-US": `Okay, I’ll put that down as ${summary}.`,
-      "es-US": `De acuerdo, anotaré ${summary}.`,
-      "zh-CN": `好的，我会记录为${summary}。`,
+      "en-US": `${readback} Is that exactly right?`,
+      "es-US": `${readback} ¿Es exactamente correcto?`,
+      "zh-CN": `${readback} 这样完全正确吗？`,
     }[locale];
   }
-  if (
-    isCollectionQuestion(answer.question) &&
-    explicitNone(answer.transcript, locale)
-  ) {
-    return {
-      "en-US": "Okay, I have the full list.",
-      "es-US": "De acuerdo, tengo la lista completa.",
-      "zh-CN": "好的，我已经记下完整清单。",
-    }[locale];
-  }
+  return confirmationPrompt(answer.summary, locale);
+}
+
+function isConfirmationQuestion(
+  value: string,
+  locale: SupportedLocale,
+) {
   return {
-    "en-US": `I have ${summary}.`,
-    "es-US": `Anoté ${summary}.`,
-    "zh-CN": `我记下了：${summary}。`,
+    "en-US":
+      /\b(?:is that|is this|did i hear|do i have|right|correct|exactly)\b/i,
+    "es-US":
+      /(?:¿?es (?:eso|esto|así)|correct[oa]|verdad|entendí bien|exactamente)/i,
+    "zh-CN": /(?:对吗|正确吗|是吗|没错吗|完全正确吗)/,
+  }[locale].test(value);
+}
+
+function confirmationBridge(
+  nextPrompt: string,
+  locale: SupportedLocale,
+) {
+  return {
+    "en-US": `Thank you, I have that. ${nextPrompt}`,
+    "es-US": `Gracias, ya lo tengo. ${nextPrompt}`,
+    "zh-CN": `谢谢，我记下了。${nextPrompt}`,
+  }[locale];
+}
+
+function confirmationAccepted(locale: SupportedLocale) {
+  return {
+    "en-US": "Thank you, I have that.",
+    "es-US": "Gracias, ya lo tengo.",
+    "zh-CN": "谢谢，我记下了。",
   }[locale];
 }
 
@@ -1906,24 +2020,6 @@ function collectionContinuationPrompt(
     },
   };
   return prompts[question.answerKind as keyof typeof prompts][locale];
-}
-
-function isBareAffirmation(
-  transcript: string,
-  locale: SupportedLocale,
-) {
-  const normalized = transcript
-    .trim()
-    .toLocaleLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[“”"'’.,!?¿¡。！？]/g, "")
-    .replace(/\s+/g, " ");
-  return {
-    "en-US": /^(?:yes|yeah|yep|correct|right|that's right|that is right)$/,
-    "es-US": /^(?:si|correcto|correcta|asi es|de acuerdo)$/,
-    "zh-CN": /^(?:是|对|正确|没错|好的)$/,
-  }[locale].test(normalized);
 }
 
 function contextualCorrection(

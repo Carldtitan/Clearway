@@ -16,11 +16,21 @@ describe("continuous microphone turn detection", () => {
   it("ends a turn after speech followed by silence", () => {
     expect(
       shouldFinishRecording({
-        elapsedMs: 3_000,
+        elapsedMs: 1_300,
         heardSpeech: true,
-        silenceMs: 1_400,
+        silenceMs: 1_000,
       }),
     ).toBe(true);
+  });
+
+  it("keeps the microphone open through the minimum answer window", () => {
+    expect(
+      shouldFinishRecording({
+        elapsedMs: 1_100,
+        heardSpeech: true,
+        silenceMs: 1_000,
+      }),
+    ).toBe(false);
   });
 
   it("does not cut off an answer while speech is continuing", () => {

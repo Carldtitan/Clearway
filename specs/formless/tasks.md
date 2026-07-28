@@ -60,12 +60,12 @@ The domain layer owns public contracts. Feature and integration work must consum
   - _Requirements: 1A–1D, 13–15_
 
 - [x] F. Make the guided application conversational
-  - [x] F.1 Replace mandatory yes/no confirmation turns with staged progressive confirmation and one acknowledgement-plus-question response.
+  - [x] F.1 Stage every spoken candidate, acknowledge immediately while extraction runs, and require an explicit localized readback confirmation before committing or advancing.
   - [x] F.2 Preview candidate actions through the canonical reducer so one long answer can resolve several later questions without mutating the live case early.
   - [x] F.3 Carry the latest 24 confirmed exchanges into extraction and exclude rejected or failed turns.
   - [x] F.4 Use schema-constrained completion signals and localized follow-up questions for missing detail.
-  - [x] F.5 Support two-minute answers, longer natural pauses, contextual correction, and concise collection-exhaustion prompts.
-  - [x] F.6 Test progressive confirmation, multi-fact skipping, long-turn detection, corrections, multilingual flow, and full browser regressions.
+  - [x] F.5 Support two-minute answers, adaptive end-of-speech timing, contextual correction with reconfirmation, and concise collection-exhaustion prompts.
+  - [x] F.6 Test explicit confirmation, latency-masking acknowledgements, multi-fact skipping, turn detection, corrections, multilingual flow, and full browser regressions.
   - _Requirements: 1B, 1D, 3, 5, 9, 13_
 
 ## V1 Tasks — Mandatory Hackathon Build

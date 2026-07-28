@@ -199,7 +199,14 @@ describe("GuidedApplication", () => {
     await waitFor(() =>
       expect(voiceMocks.speak).toHaveBeenCalledWith(
         expect.stringContaining(
-          "I have Jane Rivera. What is your Social Security number?",
+          "I heard your full legal name as Jane Rivera. Is that exactly right?",
+        ),
+      ),
+    );
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Thank you, I have that. What is your Social Security number?",
         ),
       ),
     );
@@ -223,6 +230,7 @@ describe("GuidedApplication", () => {
       .mockResolvedValueOnce(
         "I'm Jane Rivera, my SSN is 000-12-3456, and I was born January 2, 1980 in Fresno, California.",
       )
+      .mockResolvedValueOnce("yes")
       .mockResolvedValueOnce("pause")
       .mockImplementation(() => new Promise(() => undefined));
     extractionMocks.request.mockResolvedValueOnce({
@@ -280,7 +288,14 @@ describe("GuidedApplication", () => {
     await waitFor(() =>
       expect(voiceMocks.speak).toHaveBeenCalledWith(
         expect.stringContaining(
-          "I have those identity details. Are you a United States citizen?",
+          "I heard: Jane Rivera, SSN 000-12-3456, born January 2, 1980 in Fresno, California. Is that correct?",
+        ),
+      ),
+    );
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Thank you, I have that. Are you a United States citizen?",
         ),
       ),
     );
@@ -294,6 +309,103 @@ describe("GuidedApplication", () => {
             "In what city, state, and country were you born?",
       ),
     ).toBe(false);
+  });
+
+  it("does not save a spoken name until the applicant confirms the readback", async () => {
+    const user = userEvent.setup();
+    let confirmAnswer: ((value: string) => void) | undefined;
+    voiceMocks.listen
+      .mockReset()
+      .mockResolvedValueOnce("I'm ready")
+      .mockResolvedValueOnce("Alyssa Rivers")
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            confirmAnswer = resolve;
+          }),
+      )
+      .mockImplementation(() => new Promise(() => undefined));
+
+    render(
+      <CaseProvider>
+        <GuidedApplication />
+        <CaseProbe />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /EnglishEN/i }));
+
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        "I heard your full legal name as Alyssa Rivers. Is that exactly right?",
+      ),
+    );
+    expect(screen.getByTestId("legal-name")).toBeEmptyDOMElement();
+
+    confirmAnswer?.("yes");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("legal-name")).toHaveTextContent(
+        "Alyssa Rivers",
+      ),
+    );
+  });
+
+  it("speaks a short acknowledgement while extraction is still running", async () => {
+    const user = userEvent.setup();
+    let finishExtraction:
+      | ((value: Awaited<ReturnType<typeof extractionMocks.request>>) => void)
+      | undefined;
+    voiceMocks.listen
+      .mockReset()
+      .mockResolvedValueOnce("I'm ready")
+      .mockResolvedValueOnce("Alyssa Rivers")
+      .mockImplementation(() => new Promise(() => undefined));
+    extractionMocks.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishExtraction = resolve;
+        }),
+    );
+
+    render(
+      <CaseProvider>
+        <GuidedApplication />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /EnglishEN/i }));
+
+    await waitFor(
+      () =>
+        expect(voiceMocks.speak).toHaveBeenCalledWith(
+          "Okay, one moment.",
+        ),
+      { timeout: 1_500 },
+    );
+
+    finishExtraction?.({
+      summary: "Alyssa Rivers",
+      confirmationText: "I heard Alyssa Rivers. Is that correct?",
+      followUpQuestion: "",
+      providerListStatus: "unknown",
+      facts: [
+        {
+          kind: "scalar",
+          entityKey: "",
+          field: "applicant.legalName",
+          value: "Alyssa Rivers",
+          confidence: 0.99,
+          evidenceText: "Alyssa Rivers",
+        },
+      ],
+    });
+
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        "I heard your full legal name as Alyssa Rivers. Is that exactly right?",
+      ),
+    );
   });
 
   it("atomically replaces an in-progress case with the complete demo", async () => {
@@ -360,6 +472,9 @@ function CaseProbe() {
       <span data-testid="case-mode">{applicantCase.mode}</span>
       <span data-testid="case-stage">{applicantCase.stage}</span>
       <span data-testid="turn-count">{applicantCase.interviewTurns.length}</span>
+      <span data-testid="legal-name">
+        {applicantCase.applicant.legalName.value}
+      </span>
     </div>
   );
 }

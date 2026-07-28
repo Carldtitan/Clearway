@@ -99,9 +99,11 @@ LanguageSelection
       -> command handler
       -> locale-aware extraction
   -> staged candidate facts
-  -> contextual acknowledgement + next unresolved question
-      -> correction: discard candidate and repair
-      -> substantive answer: confirm prior candidate and process next answer
+  -> immediate acknowledgement while extraction runs
+  -> explicit localized readback confirmation
+      -> correction: discard candidate, repair, and reconfirm
+      -> affirmative: commit candidate
+  -> contextual bridge + next unresolved question
   -> CompletionEngine
       -> next question
       -> issue resolution
@@ -112,9 +114,9 @@ LanguageSelection
 
 The voice controller persists across the three user-facing stages. Its public methods accept the active locale and never silently fall back to a different language. Exact command parsing runs before LLM extraction so navigation speech cannot become form content.
 
-The Conversation Orchestrator uses progressive confirmation. Candidate actions are first applied to a reducer preview, never the live case. That preview selects the next unresolved registry entry, including skipping questions answered incidentally in a longer response. The assistant speaks one short acknowledgement followed by that next question. A correction discards the staged actions; any substantive response accepts them before the new response is processed. A bare affirmative remains supported but is never required.
+The Conversation Orchestrator uses explicit spoken confirmation. As soon as transcription returns, it starts structured extraction and a short localized acknowledgement concurrently so model latency does not become a silent pause. Candidate actions are applied to a reducer preview, never the live case. The assistant then reads back the interpreted answer and waits for a clear confirmation. Only an affirmative commits the staged actions; a rejection discards them and begins a conversational repair that is itself confirmed. After commitment, the preview selects the next unresolved registry entry, including skipping questions answered incidentally in a longer response.
 
-Extraction receives no more than 24 confirmed prompt/transcript pairs. Rejected and failed turns are excluded. The latest answer remains authoritative; history is used only to resolve references and must not cause historical facts to be emitted again. The extraction schema returns a short localized acknowledgement, declarative readback, completion flag, one targeted follow-up when necessary, English canonical facts, confidence, and provenance.
+Extraction receives no more than 24 confirmed prompt/transcript pairs. Rejected and failed turns are excluded. The latest answer remains authoritative; history is used only to resolve references and must not cause historical facts to be emitted again. The extraction schema returns a short localized acknowledgement, an explicit localized readback question, completion flag, one targeted follow-up when necessary, English canonical facts, confidence, and provenance.
 
 ```ts
 type SupportedLocale = "en-US" | "es-US" | "zh-CN";
