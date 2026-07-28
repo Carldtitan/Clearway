@@ -377,6 +377,11 @@ This amendment replaces the earlier user-facing Check, Interview, Review, and Pa
 7. THE demo path SHALL show the three seeded Record_Tracker states and at least one actionable follow-up script.
 8. THE demo path SHALL include an explicit Demo_Fallback for speech/extraction and a recorded fallback for document-generation failure.
 9. THE prequalification flow SHALL remain independently demonstrable if every external AI, speech, and document service is unavailable.
+10. WHEN an application conversation is in progress, THE Formless SHALL expose one secondary action to fill the application with the Synthetic_Applicant.
+11. WHEN the presenter invokes the demo-fill action, THE Formless SHALL explain that the active answers will be replaced and SHALL require confirmation before changing the Applicant_Case.
+12. WHEN the presenter confirms the demo fill, THE Formless SHALL cancel active speech and recording and SHALL atomically replace the entire Applicant_Case, including transcript, deferred, provenance, collection, review, and tracker state, without merging earlier applicant data.
+13. THE demo fill SHALL preserve the selected Conversation_Locale, identify the loaded data as synthetic, and present one primary action to continue to Documents.
+14. THE Synthetic_Applicant SHALL contain internally consistent current and prior work, disabling conditions, functional limitations, providers, medications, medical testing, claim contact, document readiness, and mixed record-follow-up states sufficient to generate the complete Document_Packet.
 
 ## V2 Requirements — Production Extension
 

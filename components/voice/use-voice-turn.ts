@@ -35,6 +35,8 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
   const audioUrlRef = useRef<string | null>(null);
   const playbackContextRef = useRef<AudioContext | null>(null);
   const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const speechAbortRef = useRef<AbortController | null>(null);
+  const speechRunRef = useRef(0);
 
   const stopMeter = useCallback(() => {
     if (animationRef.current !== null) {
@@ -132,7 +134,39 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
     }
   }, [ensureMicrophone, unlockAudioOutput]);
 
+  const cancel = useCallback(() => {
+    speechRunRef.current += 1;
+    speechAbortRef.current?.abort();
+    speechAbortRef.current = null;
+    window.speechSynthesis?.cancel();
+    utteranceRef.current = null;
+    audioRef.current?.pause();
+    audioRef.current = null;
+    try {
+      playbackSourceRef.current?.stop();
+    } catch {
+      // The source already ended.
+    }
+    playbackSourceRef.current = null;
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      shouldTranscribeRef.current = false;
+      recorder.stop();
+    }
+    stopMeter();
+    setError(null);
+    setState("idle");
+  }, [stopMeter]);
+
   const speak = useCallback(async (text: string) => {
+    const speechRun = ++speechRunRef.current;
+    speechAbortRef.current?.abort();
+    const speechAbort = new AbortController();
+    speechAbortRef.current = speechAbort;
     setError(null);
     setState("speaking");
     try {
@@ -151,12 +185,16 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, locale }),
+        signal: speechAbort.signal,
       });
+      if (speechRun !== speechRunRef.current) return;
       if (response.ok) {
         const blob = await response.blob();
+        if (speechRun !== speechRunRef.current) return;
         const context = await unlockAudioOutput();
         if (context) {
           const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+          if (speechRun !== speechRunRef.current) return;
           const source = context.createBufferSource();
           source.buffer = buffer;
           source.connect(context.destination);
@@ -184,16 +222,20 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
           URL.revokeObjectURL(url);
           audioUrlRef.current = null;
         }
+        if (speechRun !== speechRunRef.current) return;
+        speechAbortRef.current = null;
         setState("idle");
         return;
       }
     } catch {
       // Browser speech below is the no-network and autoplay-safe fallback.
     }
+    if (speechRun !== speechRunRef.current) return;
     if (
       !("speechSynthesis" in window) ||
       !("SpeechSynthesisUtterance" in window)
     ) {
+      speechAbortRef.current = null;
       setState("idle");
       return;
     }
@@ -209,7 +251,9 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       window.speechSynthesis.speak(utterance);
       window.setTimeout(resolve, Math.max(4_000, text.length * 85));
     });
+    if (speechRun !== speechRunRef.current) return;
     utteranceRef.current = null;
+    speechAbortRef.current = null;
     setState("idle");
   }, [locale, unlockAudioOutput]);
 
@@ -314,6 +358,9 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
 
   useEffect(
     () => () => {
+      speechRunRef.current += 1;
+      speechAbortRef.current?.abort();
+      speechAbortRef.current = null;
       window.speechSynthesis?.cancel();
       audioRef.current?.pause();
       audioRef.current = null;
@@ -344,6 +391,7 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
   return {
     activate,
     ask,
+    cancel,
     error,
     finishAnswer,
     lastTranscript,

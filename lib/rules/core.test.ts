@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { syntheticApplicant } from "@/lib/case/seed";
+import { evaluateCompleteness } from "@/lib/conversation/completeness";
 import { buildDocumentChecklist } from "@/lib/rules/checklist";
 import {
   addCalendarDays,
@@ -80,5 +81,24 @@ describe("deterministic core", () => {
       (issue) => issue.severity === "blocking",
     );
     expect(blocking).toEqual([]);
+    expect(evaluateCompleteness(syntheticApplicant).ready).toBe(true);
+  });
+
+  it("keeps the demo work story and collection states internally coherent", () => {
+    expect(syntheticApplicant.currentlyEarning.value).toBe(true);
+    expect(syntheticApplicant.eligibilityInput.monthlyEarningsUsd).toBe(1480);
+    expect(
+      syntheticApplicant.jobs.some(
+        (job) =>
+          job.endDate.value === null &&
+          job.reasonEnded.provenance.state === "not_applicable",
+      ),
+    ).toBe(true);
+    expect(syntheticApplicant.collectionCompletion.marriages).toBe(
+      "complete_none",
+    );
+    expect(syntheticApplicant.collectionCompletion.children).toBe(
+      "complete_none",
+    );
   });
 });

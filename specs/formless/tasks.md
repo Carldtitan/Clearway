@@ -568,11 +568,12 @@ The domain layer owns public contracts. Feature and integration work must consum
     - _Requirements: 2.15, 3.11, 9.13, 13_
 
 - [ ] 16. Rehearse and validate the three-minute demo
-  - [ ] 16.1 Implement the deterministic demo launcher
-    - Add `Load demo case` at product entry.
-    - Load fixed case, transcript sequence, candidate patches, record states, and demo clock.
-    - Identify fallback state without dominating the interface.
-    - _Requirements: 14.3, 14.9, 15.3–15.8_
+  - [x] 16.1 Implement the deterministic demo launcher
+    - Expose `Fill demo application` throughout the active Application conversation.
+    - Confirm destructive replacement, cancel the active voice turn, and replace the case through one `LOAD_CASE` action.
+    - Preserve the selected language while removing all prior answers, transcripts, conflicts, and deferred state.
+    - Load the evidence-rich Synthetic_Applicant and present one transition to Documents.
+    - _Requirements: 14.3, 14.9, 15.3–15.14_
 
   - [ ] 16.2 Rehearse the primary judge path
     - Show Check result and named rule.

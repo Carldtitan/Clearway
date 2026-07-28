@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GuidedApplication } from "@/components/application/guided-application";
-import { CaseProvider } from "@/components/app/case-context";
+import {
+  CaseProvider,
+  useApplicantCase,
+} from "@/components/app/case-context";
+import { syntheticApplicant } from "@/lib/case/seed";
 
 vi.mock("@/components/visual/orb", () => ({
   default: () => <div data-testid="voice-orb" />,
@@ -11,6 +15,7 @@ vi.mock("@/components/visual/orb", () => ({
 
 const voiceMocks = vi.hoisted(() => ({
   activate: vi.fn(),
+  cancel: vi.fn(),
   listen: vi.fn(),
   speak: vi.fn(),
 }));
@@ -39,6 +44,7 @@ vi.mock("@/lib/extraction/client", () => ({
 
 beforeEach(() => {
   voiceMocks.activate.mockReset().mockResolvedValue(undefined);
+  voiceMocks.cancel.mockReset();
   voiceMocks.speak.mockReset().mockResolvedValue(undefined);
   voiceMocks.listen
     .mockReset()
@@ -289,4 +295,71 @@ describe("GuidedApplication", () => {
       ),
     ).toBe(false);
   });
+
+  it("atomically replaces an in-progress case with the complete demo", async () => {
+    const user = userEvent.setup();
+    const inProgressCase = structuredClone(syntheticApplicant);
+    inProgressCase.mode = "session";
+    inProgressCase.applicationPhase = "intake";
+    inProgressCase.activeQuestionId = "ssn";
+    inProgressCase.finalReviewApproved = false;
+    inProgressCase.applicant.legalName.value = "Original Applicant";
+    inProgressCase.interviewTurns = [
+      {
+        id: "original-turn",
+        source: "typed",
+        locale: "en-US",
+        prompt: "What is your full legal name?",
+        transcript: "Original Applicant",
+        createdAt: "2026-07-28T12:00:00.000Z",
+        status: "extracted",
+      },
+    ];
+
+    render(
+      <CaseProvider initialCase={inProgressCase}>
+        <GuidedApplication />
+        <CaseProbe />
+      </CaseProvider>,
+    );
+
+    expect(screen.getAllByText("Original Applicant")).not.toHaveLength(0);
+    await user.click(
+      screen.getByRole("button", { name: "Fill demo application" }),
+    );
+    expect(
+      screen.getByRole("dialog", {
+        name: "Replace this application with the demo case?",
+      }),
+    ).toBeVisible();
+    expect(voiceMocks.cancel).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "Load demo case" }));
+
+    expect(voiceMocks.cancel).toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", {
+        name: "Elena Rivera’s application is complete.",
+      }),
+    ).toBeVisible();
+    expect(screen.queryAllByText("Original Applicant")).toHaveLength(0);
+    expect(screen.getByTestId("case-mode")).toHaveTextContent("synthetic_demo");
+    expect(screen.getByTestId("turn-count")).toHaveTextContent("0");
+
+    await user.click(
+      screen.getByRole("button", { name: "Continue to documents" }),
+    );
+    expect(screen.getByTestId("case-stage")).toHaveTextContent("documents");
+  });
 });
+
+function CaseProbe() {
+  const { applicantCase } = useApplicantCase();
+  return (
+    <div hidden>
+      <span data-testid="case-mode">{applicantCase.mode}</span>
+      <span data-testid="case-stage">{applicantCase.stage}</span>
+      <span data-testid="turn-count">{applicantCase.interviewTurns.length}</span>
+    </div>
+  );
+}

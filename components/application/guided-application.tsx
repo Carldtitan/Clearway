@@ -1,15 +1,18 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   Check,
   CheckCircle2,
   CircleAlert,
+  FileCheck2,
   Keyboard,
   Mic,
   Pause,
   RotateCcw,
   Send,
   Volume2,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -95,6 +98,7 @@ export function GuidedApplication() {
   const {
     applicantCase,
     dispatch,
+    loadDemo,
     setVoiceSessionActive,
   } = useApplicantCase();
   const locale = applicantCase.conversationLocale ?? "en-US";
@@ -119,6 +123,9 @@ export function GuidedApplication() {
     () => evaluateCompleteness(applicantCase, locale),
     [applicantCase, locale],
   );
+  const demoCaseReady =
+    applicantCase.mode === "synthetic_demo" &&
+    applicantCase.applicationPhase === "ready";
 
   useEffect(() => {
     caseRef.current = applicantCase;
@@ -975,6 +982,51 @@ export function GuidedApplication() {
     window.setTimeout(() => void askAt(cursor), 120);
   }
 
+  function replaceWithDemoCase() {
+    ++runIdRef.current;
+    voice.cancel();
+    setVoiceSessionActive(false);
+    loadDemo(locale);
+    setCursor(QUESTION_REGISTRY.length);
+    setError(null);
+    setPending(null);
+    setRepairPrompt(null);
+    setTypedAnswer("");
+    setTypedMode(false);
+    setStatus("complete");
+  }
+
+  function pauseForDemoDialog() {
+    ++runIdRef.current;
+    voice.cancel();
+    setVoiceSessionActive(false);
+    setStatus("paused");
+  }
+
+  function resumeAfterDemoDialog() {
+    setVoiceSessionActive(true);
+    setError(null);
+    if (currentQuestion) {
+      setStatus("asking");
+      window.setTimeout(() => void askQuestion(currentQuestion), 120);
+      return;
+    }
+    if (
+      applicantCase.applicationPhase === "introduction" ||
+      applicantCase.applicationPhase === "document_readiness"
+    ) {
+      ++runIdRef.current;
+      setStatus("introducing");
+      window.setTimeout(() => void continueLanguageStart(locale), 120);
+      return;
+    }
+    setStatus(
+      applicantCase.applicationPhase === "issue_resolution"
+        ? "review"
+        : "waiting",
+    );
+  }
+
   if (applicantCase.applicationPhase === "language") {
     return <LanguageSelection onSelect={chooseLanguage} />;
   }
@@ -989,7 +1041,7 @@ export function GuidedApplication() {
   return (
     <div className="mx-auto grid w-full max-w-[75rem] gap-6 pb-24 pt-2 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-10 lg:pt-6">
       <section className="min-w-0">
-        <header className="flex items-center justify-between gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-primary">
               {localized(copy.application, locale)}
@@ -998,20 +1050,30 @@ export function GuidedApplication() {
               {completion.answered} / {completion.total}
             </p>
           </div>
-          <LanguageMenu
-            locale={locale}
-            onChange={(nextLocale) => {
-              dispatch({
-                type: "SET_CONVERSATION_LOCALE",
-                locale: nextLocale,
-              });
-              dispatch({
-                type: "EDIT_VALUE",
-                path: "applicant.preferredLanguage",
-                value: localeDefinition(nextLocale).preferredLanguageValue,
-              });
-            }}
-          />
+          <div className="ml-auto flex items-center gap-2">
+            {!demoCaseReady ? (
+              <DemoFillDialog
+                locale={locale}
+                onCancel={resumeAfterDemoDialog}
+                onConfirm={replaceWithDemoCase}
+                onOpen={pauseForDemoDialog}
+              />
+            ) : null}
+            <LanguageMenu
+              locale={locale}
+              onChange={(nextLocale) => {
+                dispatch({
+                  type: "SET_CONVERSATION_LOCALE",
+                  locale: nextLocale,
+                });
+                dispatch({
+                  type: "EDIT_VALUE",
+                  path: "applicant.preferredLanguage",
+                  value: localeDefinition(nextLocale).preferredLanguageValue,
+                });
+              }}
+            />
+          </div>
         </header>
 
         <div className="mt-5 overflow-hidden rounded-[1.15rem] border border-border bg-surface shadow-[0_22px_70px_oklch(0_0_0/0.055)]">
@@ -1077,6 +1139,15 @@ export function GuidedApplication() {
               </AnimatePresence>
             ) : null}
 
+            {demoCaseReady ? (
+              <DemoReadyState
+                locale={locale}
+                onContinue={() =>
+                  dispatch({ type: "SET_STAGE", stage: "documents" })
+                }
+              />
+            ) : null}
+
             {status === "review" ? (
               <ReviewIssues
                 completion={completion}
@@ -1131,25 +1202,127 @@ export function GuidedApplication() {
               />
             ) : null}
 
-            <ConversationControls
-              locale={locale}
-              onFinish={() => voice.finishAnswer()}
-              onPause={() => {
-                if (voice.state === "paused") voice.resume();
-                else voice.pause();
-              }}
-              onRepeat={() =>
-                void voice.speak(activePrompt)
-              }
-              onType={() => setTypedMode((visible) => !visible)}
-              showTypeAction={!typedMode}
-              state={voice.state}
-            />
+            {!demoCaseReady ? (
+              <ConversationControls
+                locale={locale}
+                onFinish={() => voice.finishAnswer()}
+                onPause={() => {
+                  if (voice.state === "paused") voice.resume();
+                  else voice.pause();
+                }}
+                onRepeat={() => void voice.speak(activePrompt)}
+                onType={() => setTypedMode((visible) => !visible)}
+                showTypeAction={!typedMode}
+                state={voice.state}
+              />
+            ) : null}
           </div>
         </div>
       </section>
 
       <ContextPanel applicantCase={applicantCase} locale={locale} />
+    </div>
+  );
+}
+
+function DemoFillDialog({
+  locale,
+  onCancel,
+  onConfirm,
+  onOpen,
+}: {
+  locale: SupportedLocale;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onOpen: () => void;
+}) {
+  const confirmedRef = useRef(false);
+  return (
+    <Dialog.Root
+      onOpenChange={(open) => {
+        if (open) {
+          onOpen();
+          return;
+        }
+        if (!confirmedRef.current) onCancel();
+        confirmedRef.current = false;
+      }}
+    >
+      <Dialog.Trigger asChild>
+        <Button
+          aria-label={localized(copy.fillDemo, locale)}
+          size="small"
+          variant="secondary"
+        >
+          <FileCheck2 aria-hidden="true" className="size-4" />
+          <span className="hidden sm:inline">
+            {localized(copy.fillDemo, locale)}
+          </span>
+          <span className="sm:hidden">
+            {localized(copy.demoShort, locale)}
+          </span>
+        </Button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-foreground/35" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[1.15rem] border border-border bg-surface p-6 shadow-[0_28px_90px_oklch(0_0_0/0.24)] sm:p-7">
+          <Dialog.Title className="pr-10 text-2xl font-bold tracking-[-0.025em]">
+            {localized(copy.demoReplaceTitle, locale)}
+          </Dialog.Title>
+          <Dialog.Description className="mt-3 leading-relaxed text-muted">
+            {localized(copy.demoReplaceDescription, locale)}
+          </Dialog.Description>
+          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Dialog.Close asChild>
+              <Button variant="secondary">
+                {localized(copy.keepAnswers, locale)}
+              </Button>
+            </Dialog.Close>
+            <Dialog.Close asChild>
+              <Button
+                onClick={() => {
+                  confirmedRef.current = true;
+                  onConfirm();
+                }}
+              >
+                {localized(copy.loadDemoCase, locale)}
+              </Button>
+            </Dialog.Close>
+          </div>
+          <Dialog.Close
+            aria-label="Close"
+            className="absolute right-4 top-4 grid size-10 place-items-center rounded-[var(--radius-control)] text-muted transition-colors hover:bg-surface-subtle hover:text-foreground"
+          >
+            <X aria-hidden="true" className="size-5" />
+          </Dialog.Close>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function DemoReadyState({
+  locale,
+  onContinue,
+}: {
+  locale: SupportedLocale;
+  onContinue: () => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-sm font-bold text-success">
+        <CheckCircle2 aria-hidden="true" className="size-5" />
+        {localized(copy.demoLoaded, locale)}
+      </div>
+      <h1 className="mt-4 max-w-[24ch] text-3xl font-bold leading-[1.08] tracking-[-0.035em] text-balance sm:text-4xl">
+        {localized(copy.demoReadyTitle, locale)}
+      </h1>
+      <p className="mt-4 max-w-[42rem] leading-relaxed text-muted">
+        {localized(copy.demoReadyDescription, locale)}
+      </p>
+      <Button className="mt-7" onClick={onContinue}>
+        {localized(copy.continueDocuments, locale)}
+      </Button>
     </div>
   );
 }
