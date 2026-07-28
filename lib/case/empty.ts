@@ -28,6 +28,8 @@ export function createEmptyApplicantCase(): ApplicantCase {
       selfEmployed: null,
       selfEmploymentProfitUsd: null,
       passiveIncomeIncluded: null,
+      conditionExpectedToLast12Months: null,
+      conditionExpectedToResultInDeath: null,
       dateOfBirth: null,
       allegedOnsetDate: null,
       estimatedLifetimeCredits: null,

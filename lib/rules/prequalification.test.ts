@@ -17,6 +17,8 @@ const baseInput: EligibilityInput = {
   selfEmployed: false,
   selfEmploymentProfitUsd: null,
   passiveIncomeIncluded: false,
+  conditionExpectedToLast12Months: true,
+  conditionExpectedToResultInDeath: false,
   dateOfBirth: "1978-04-12",
   allegedOnsetDate: "2025-10-18",
   estimatedLifetimeCredits: 40,
@@ -119,5 +121,20 @@ describe("prequalification rules", () => {
     expect(result.status).toBe("uncertain");
     expect(result.durationOfWork.nextAction).toContain("my Social Security");
     expect(result.recentWork.nextAction).toContain("my Social Security");
+  });
+
+  it("keeps the medical duration rule separate and non-blocking", () => {
+    const result = evaluatePrequalification(
+      {
+        ...baseInput,
+        conditionExpectedToLast12Months: false,
+        conditionExpectedToResultInDeath: false,
+      },
+      SSA_RULES_2026,
+    );
+    expect(result.medicalDuration.status).toBe("needs_review");
+    expect(result.medicalDuration.nextAction).toContain(
+      "does not prevent an application",
+    );
   });
 });

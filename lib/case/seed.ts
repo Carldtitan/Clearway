@@ -32,6 +32,8 @@ export const syntheticApplicant: ApplicantCase = {
     selfEmployed: false,
     selfEmploymentProfitUsd: null,
     passiveIncomeIncluded: false,
+    conditionExpectedToLast12Months: true,
+    conditionExpectedToResultInDeath: false,
     dateOfBirth: "1978-04-12",
     allegedOnsetDate: "2025-10-18",
     estimatedLifetimeCredits: 31,

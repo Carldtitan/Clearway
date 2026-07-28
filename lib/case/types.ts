@@ -54,6 +54,8 @@ export interface EligibilityInput {
   selfEmployed: boolean | null;
   selfEmploymentProfitUsd: number | null;
   passiveIncomeIncluded: boolean | null;
+  conditionExpectedToLast12Months: boolean | null;
+  conditionExpectedToResultInDeath: boolean | null;
   dateOfBirth: string | null;
   allegedOnsetDate: string | null;
   estimatedLifetimeCredits: number | null;

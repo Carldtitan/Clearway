@@ -10,6 +10,7 @@ export interface PrequalificationResult {
   effectiveYear: number;
   ageAtOnset: number | null;
   sga: RuleResult;
+  medicalDuration: RuleResult;
   durationOfWork: RuleResult;
   recentWork: RuleResult;
 }
@@ -207,6 +208,44 @@ export function evaluateDurationOfWork(
   };
 }
 
+export function evaluateMedicalDuration(input: EligibilityInput): RuleResult {
+  if (
+    input.conditionExpectedToLast12Months === true ||
+    input.conditionExpectedToResultInDeath === true
+  ) {
+    return {
+      ruleId: "MEDICAL-DURATION",
+      status: "looks_clear",
+      title: "The duration answer fits the basic rule",
+      reason:
+        "You said the condition has lasted or is expected to last at least 12 months, or is expected to result in death.",
+      nextAction: "SSA still needs medical evidence and decides the claim.",
+    };
+  }
+  if (
+    input.conditionExpectedToLast12Months === false &&
+    input.conditionExpectedToResultInDeath === false
+  ) {
+    return {
+      ruleId: "MEDICAL-DURATION",
+      status: "needs_review",
+      title: "The 12-month duration rule needs review",
+      reason:
+        "Social Security generally requires a condition to last or be expected to last at least 12 months, or to result in death.",
+      nextAction:
+        "Confirm the expected duration with a treating medical source. This screen does not prevent an application.",
+    };
+  }
+  return {
+    ruleId: "MEDICAL-DURATION-INPUT",
+    status: "uncertain",
+    title: "Expected duration is still unknown",
+    reason:
+      "The basic disability definition includes a 12-month duration or expected-death requirement.",
+    nextAction: "Confirm the expected duration before relying on this screen.",
+  };
+}
+
 export function evaluateRecentWork(
   input: EligibilityInput,
   ageAtOnset: number | null,
@@ -278,9 +317,15 @@ export function evaluatePrequalification(
       ? yearsBetween(input.dateOfBirth, input.allegedOnsetDate)
       : null;
   const sga = evaluateSga(input, config);
+  const medicalDuration = evaluateMedicalDuration(input);
   const durationOfWork = evaluateDurationOfWork(input, config, ageAtOnset);
   const recentWork = evaluateRecentWork(input, ageAtOnset);
-  const statuses = [sga.status, durationOfWork.status, recentWork.status];
+  const statuses = [
+    sga.status,
+    medicalDuration.status,
+    durationOfWork.status,
+    recentWork.status,
+  ];
   const status: DecisionStatus = statuses.includes("needs_review")
     ? "needs_review"
     : statuses.includes("uncertain")
@@ -291,6 +336,7 @@ export function evaluatePrequalification(
     effectiveYear: config.effectiveYear,
     ageAtOnset,
     sga,
+    medicalDuration,
     durationOfWork,
     recentWork,
   };
