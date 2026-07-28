@@ -17,7 +17,9 @@ const voiceMocks = vi.hoisted(() => ({
   activate: vi.fn(),
   cancel: vi.fn(),
   listen: vi.fn(),
+  skipSpeech: vi.fn(),
   speak: vi.fn(),
+  state: "idle",
 }));
 
 const extractionMocks = vi.hoisted(() => ({
@@ -34,7 +36,7 @@ vi.mock("@/components/voice/use-voice-turn", () => ({
     level: 0,
     pause: vi.fn(),
     resume: vi.fn(),
-    state: "idle",
+    state: voiceMocks.state,
   }),
 }));
 
@@ -45,7 +47,9 @@ vi.mock("@/lib/extraction/client", () => ({
 beforeEach(() => {
   voiceMocks.activate.mockReset().mockResolvedValue(undefined);
   voiceMocks.cancel.mockReset();
+  voiceMocks.skipSpeech.mockReset();
   voiceMocks.speak.mockReset().mockResolvedValue(undefined);
+  voiceMocks.state = "idle";
   voiceMocks.listen
     .mockReset()
     .mockImplementation(() => new Promise(() => undefined));
@@ -139,6 +143,30 @@ describe("GuidedApplication", () => {
     expect(
       screen.getByRole("combobox", { name: "Conversation language" }),
     ).toHaveValue("es-US");
+  });
+
+  it("lets the applicant skip pending audio and answer immediately", async () => {
+    const user = userEvent.setup();
+    const inProgressCase = structuredClone(syntheticApplicant);
+    inProgressCase.mode = "session";
+    inProgressCase.applicationPhase = "intake";
+    inProgressCase.activeQuestionId = "legal-name";
+    inProgressCase.finalReviewApproved = false;
+    voiceMocks.state = "speaking";
+
+    render(
+      <CaseProvider initialCase={inProgressCase}>
+        <GuidedApplication />
+      </CaseProvider>,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Skip audio and answer now",
+      }),
+    );
+
+    expect(voiceMocks.skipSpeech).toHaveBeenCalledOnce();
   });
 
   it("returns to listening when transcription misses an answer", async () => {

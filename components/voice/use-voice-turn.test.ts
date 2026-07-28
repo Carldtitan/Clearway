@@ -1,9 +1,44 @@
-import { describe, expect, it } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   selectBrowserVoice,
   shouldFinishRecording,
+  useVoiceTurn,
 } from "@/components/voice/use-voice-turn";
+
+describe("speech interruption", () => {
+  it("resolves pending TTS immediately when the applicant skips it", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            );
+          }),
+      );
+    const { result } = renderHook(() => useVoiceTurn("en-US"));
+    let speechPromise: Promise<void> | undefined;
+
+    act(() => {
+      speechPromise = result.current.speak("A question that is still loading.");
+    });
+
+    await waitFor(() => expect(result.current.state).toBe("speaking"));
+
+    await act(async () => {
+      result.current.skipSpeech();
+      await speechPromise;
+    });
+
+    expect(result.current.state).toBe("idle");
+    fetchMock.mockRestore();
+  });
+});
 
 describe("continuous microphone turn detection", () => {
   it("waits indefinitely until the applicant starts speaking", () => {

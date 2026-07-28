@@ -1254,6 +1254,7 @@ export function GuidedApplication() {
                   else voice.pause();
                 }}
                 onRepeat={() => void voice.speak(activePrompt)}
+                onSkipAudio={() => voice.skipSpeech()}
                 onType={() => setTypedMode((visible) => !visible)}
                 showTypeAction={!typedMode}
                 state={voice.state}
@@ -1542,6 +1543,7 @@ function ConversationControls({
   onFinish,
   onPause,
   onRepeat,
+  onSkipAudio,
   onType,
   showTypeAction,
   state,
@@ -1550,12 +1552,32 @@ function ConversationControls({
   onFinish: () => void;
   onPause: () => void;
   onRepeat: () => void;
+  onSkipAudio: () => void;
   onType: () => void;
   showTypeAction: boolean;
   state: ReturnType<typeof useVoiceTurn>["state"];
 }) {
   return (
     <div className="mt-7 flex flex-wrap items-center gap-2 border-t border-border pt-5">
+      {state === "speaking" ? (
+        <Button
+          aria-label={
+            locale === "es-US"
+              ? "Omitir el audio y responder ahora"
+              : locale === "zh-CN"
+                ? "跳过语音并立即回答"
+                : "Skip audio and answer now"
+          }
+          onClick={onSkipAudio}
+        >
+          <Mic aria-hidden="true" className="size-4" />
+          {locale === "es-US"
+            ? "Responder ahora"
+            : locale === "zh-CN"
+              ? "立即回答"
+              : "Answer now"}
+        </Button>
+      ) : null}
       {state === "listening" ? (
         <Button onClick={onFinish}>
           <Check aria-hidden="true" className="size-4" />

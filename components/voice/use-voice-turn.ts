@@ -37,6 +37,7 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
   const playbackContextRef = useRef<AudioContext | null>(null);
   const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const speechAbortRef = useRef<AbortController | null>(null);
+  const speechCompletionRef = useRef<(() => void) | null>(null);
   const speechRunRef = useRef(0);
 
   const stopMeter = useCallback(() => {
@@ -135,7 +136,7 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
     }
   }, [ensureMicrophone, unlockAudioOutput]);
 
-  const cancel = useCallback(() => {
+  const skipSpeech = useCallback(() => {
     speechRunRef.current += 1;
     speechAbortRef.current?.abort();
     speechAbortRef.current = null;
@@ -153,18 +154,26 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = null;
     }
+    speechCompletionRef.current?.();
+    speechCompletionRef.current = null;
+    setError(null);
+    setState("idle");
+  }, []);
+
+  const cancel = useCallback(() => {
+    skipSpeech();
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== "inactive") {
       shouldTranscribeRef.current = false;
       recorder.stop();
     }
     stopMeter();
-    setError(null);
-    setState("idle");
-  }, [stopMeter]);
+  }, [skipSpeech, stopMeter]);
 
   const speak = useCallback(async (text: string) => {
     const speechRun = ++speechRunRef.current;
+    speechCompletionRef.current?.();
+    speechCompletionRef.current = null;
     speechAbortRef.current?.abort();
     const speechAbort = new AbortController();
     speechAbortRef.current = speechAbort;
@@ -204,7 +213,17 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
             source.connect(context.destination);
             playbackSourceRef.current = source;
             await new Promise<void>((resolve) => {
-              source.addEventListener("ended", () => resolve(), { once: true });
+              let settled = false;
+              const finish = () => {
+                if (settled) return;
+                settled = true;
+                if (speechCompletionRef.current === finish) {
+                  speechCompletionRef.current = null;
+                }
+                resolve();
+              };
+              speechCompletionRef.current = finish;
+              source.addEventListener("ended", finish, { once: true });
               source.start();
             });
             playbackSourceRef.current = null;
@@ -214,13 +233,31 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
             const audio = new Audio(url);
             audioRef.current = audio;
             await new Promise<void>((resolve, reject) => {
-              audio.addEventListener("ended", () => resolve(), { once: true });
+              let settled = false;
+              const finish = () => {
+                if (settled) return;
+                settled = true;
+                if (speechCompletionRef.current === finish) {
+                  speechCompletionRef.current = null;
+                }
+                resolve();
+              };
+              const fail = () => {
+                if (settled) return;
+                settled = true;
+                if (speechCompletionRef.current === finish) {
+                  speechCompletionRef.current = null;
+                }
+                reject(new Error("Generated speech could not play."));
+              };
+              speechCompletionRef.current = finish;
+              audio.addEventListener("ended", finish, { once: true });
               audio.addEventListener(
                 "error",
-                () => reject(new Error("Generated speech could not play.")),
+                fail,
                 { once: true },
               );
-              audio.play().catch(reject);
+              audio.play().catch(fail);
             });
             audioRef.current = null;
             URL.revokeObjectURL(url);
@@ -260,11 +297,15 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       const finish = () => {
         if (settled) return;
         settled = true;
+        if (speechCompletionRef.current === finish) {
+          speechCompletionRef.current = null;
+        }
         resolve();
       };
       utterance.onend = finish;
       utterance.onerror = finish;
       utteranceRef.current = utterance;
+      speechCompletionRef.current = finish;
       window.speechSynthesis.speak(utterance);
       window.setTimeout(finish, Math.max(4_000, text.length * 85));
     });
@@ -379,6 +420,8 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       speechAbortRef.current?.abort();
       speechAbortRef.current = null;
       window.speechSynthesis?.cancel();
+      speechCompletionRef.current?.();
+      speechCompletionRef.current = null;
       audioRef.current?.pause();
       audioRef.current = null;
       try {
@@ -416,6 +459,7 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
     listen,
     pause,
     resume,
+    skipSpeech,
     speak,
     state,
   };
