@@ -118,3 +118,36 @@ test("packet workspace remains usable at phone width", async ({ page }) => {
     .analyze();
   expect(audit.violations).toEqual([]);
 });
+
+test("packet failure preserves progress and exposes the recorded fallback", async ({
+  page,
+}) => {
+  await reachPacket(page);
+  await page.route("**/api/packet/generate", (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        error:
+          "Document generation is unavailable right now. Your answers are still here.",
+      }),
+      contentType: "application/json",
+      status: 503,
+    }),
+  );
+
+  await page.getByRole("button", { name: /generate packet/i }).click();
+
+  await expect(page.getByText("Packet not generated")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  const fallback = page.getByRole("link", {
+    name: /watch the synthetic packet fallback/i,
+  });
+  await expect(fallback).toHaveAttribute(
+    "href",
+    "/demo/packet-fallback.webm",
+  );
+
+  const response = await page.request.get("/demo/packet-fallback.webm");
+  expect(response.ok()).toBe(true);
+  expect(response.headers()["content-type"]).toContain("video/webm");
+  expect((await response.body()).byteLength).toBeGreaterThan(1_000_000);
+});

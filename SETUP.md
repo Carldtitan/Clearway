@@ -54,9 +54,11 @@ To inspect Anvil aliases or regenerate and verify the live packet directly:
 ```bash
 npm run inspect:anvil
 npm run verify:packet:live
+npm run record:demo-fallback
 ```
 
 Generated packet and screenshot artifacts are written under ignored `output/` directories and are never committed.
+The fallback command refreshes `public/demo/packet-fallback.webm` using only the synthetic applicant.
 
 ## V1 boundaries
 

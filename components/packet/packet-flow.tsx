@@ -422,6 +422,14 @@ function PacketStatus({
         <div>
           <p className="font-bold">Packet not generated</p>
           <p className="mt-0.5 text-sm leading-relaxed">{errorMessage}</p>
+          <a
+            className="mt-2 inline-flex min-h-11 items-center font-bold underline decoration-current/35 underline-offset-4"
+            href="/demo/packet-fallback.webm"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Watch the synthetic packet fallback
+          </a>
         </div>
       </div>
     );
@@ -487,4 +495,3 @@ function ChecklistPanel({
     </aside>
   );
 }
-
