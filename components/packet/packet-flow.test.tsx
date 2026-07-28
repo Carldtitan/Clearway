@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { CaseProvider } from "@/components/app/case-context";
@@ -31,5 +32,23 @@ describe("PacketFlow", () => {
       screen.getByRole("button", { name: /generate packet/i }),
     ).toBeEnabled();
   });
-});
 
+  it("adds an extra blank authorization only after the applicant asks", async () => {
+    const user = userEvent.setup();
+    const applicantCase = structuredClone(syntheticApplicant);
+    applicantCase.stage = "packet";
+    render(
+      <CaseProvider initialCase={applicantCase}>
+        <PacketFlow />
+      </CaseProvider>,
+    );
+
+    expect(screen.getAllByText("SSA-827")).toHaveLength(1);
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /include one extra blank SSA-827 original/i,
+      }),
+    );
+    expect(screen.getAllByText("SSA-827")).toHaveLength(2);
+  });
+});

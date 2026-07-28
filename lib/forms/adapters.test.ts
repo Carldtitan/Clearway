@@ -29,6 +29,20 @@ describe("SSA form adapters", () => {
     expect(forms.filter((form) => form.kind === "ssa827")).toHaveLength(1);
   });
 
+  it("adds only an explicitly requested blank SSA-827 original", () => {
+    const applicantCase = structuredClone(syntheticApplicant);
+    applicantCase.authorization.additionalBlankOriginalRequested = true;
+    const forms = buildFormPayloads(applicantCase);
+    const authorizations = forms.filter((form) => form.kind === "ssa827");
+
+    expect(authorizations).toHaveLength(2);
+    expect(authorizations[0].payload.data).not.toEqual({});
+    expect(authorizations[1].label).toContain("additional blank original");
+    expect(authorizations[1].payload.data).toEqual({
+      nameFirstMiddleLastSuffix: { firstName: "", lastName: "" },
+    });
+  });
+
   it("reuses the same onset date across SSA-16 and SSA-3368", () => {
     const [ssa16, ssa3368] = buildFormPayloads(syntheticApplicant);
     expect(

@@ -10,6 +10,8 @@ async function main() {
       condition.allegedOnsetDate.provenance.state = "confirmed";
     }
   });
+  applicantCase.authorization.additionalBlankOriginalRequested =
+    process.env.INCLUDE_ADDITIONAL_SSA827 === "true";
   const response = await fetch(
     process.env.PACKET_TEST_URL ??
       "http://localhost:3000/api/packet/generate",

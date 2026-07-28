@@ -164,6 +164,7 @@ export interface RecordRequest {
 
 export interface AuthorizationState {
   signedAt: string | null;
+  additionalBlankOriginalRequested: boolean;
 }
 
 export interface DocumentState {
@@ -241,6 +242,7 @@ export type CaseAction =
   | AddEntityAction
   | { type: "DELETE_ENTITY"; collection: CanonicalCollection; id: string }
   | { type: "SET_PROVIDER_COLLECTION_COMPLETE"; complete: boolean }
+  | { type: "SET_ADDITIONAL_SSA827"; requested: boolean }
   | { type: "SET_STAGE"; stage: ApplicantCase["stage"] }
   | { type: "SET_DOCUMENT_STATE"; state: DocumentState }
   | { type: "SET_RECORD_REQUEST"; request: RecordRequest }

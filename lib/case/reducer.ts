@@ -43,6 +43,14 @@ export function caseReducer(
         ...state,
         providerCollectionComplete: action.complete,
       });
+    case "SET_ADDITIONAL_SSA827":
+      return changed(state, {
+        ...state,
+        authorization: {
+          ...state.authorization,
+          additionalBlankOriginalRequested: action.requested,
+        },
+      });
     case "SET_STAGE":
       return { ...state, stage: action.stage };
     case "SET_DOCUMENT_STATE":

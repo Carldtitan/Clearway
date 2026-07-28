@@ -24,7 +24,13 @@ import { buildDocumentChecklist } from "@/lib/rules/checklist";
 import { partitionForForm } from "@/lib/rules/consistency";
 import { cn } from "@/lib/utils";
 
-const baseDocuments = [
+interface PacketDocument {
+  id: string;
+  name: string;
+  detail: string;
+}
+
+const baseDocuments: PacketDocument[] = [
   {
     id: "ssa16",
     name: "SSA-16",
@@ -50,7 +56,7 @@ const baseDocuments = [
     name: "Evidence index",
     detail: "Provider requests and deadlines",
   },
-] as const;
+];
 
 type GenerationStatus = "idle" | "generating" | "complete" | "failed";
 
@@ -64,17 +70,21 @@ export function PacketFlow() {
     partitionForForm(applicantCase.providers, 6).overflow.length > 0 ||
     partitionForForm(applicantCase.medications, 11).overflow.length > 0 ||
     partitionForForm(applicantCase.jobs, 5).overflow.length > 0;
-  const documents = hasContinuation
-    ? [
-        ...baseDocuments.slice(0, 4),
-        {
-          id: "continuation",
-          name: "Continuation sheet",
-          detail: "Every item beyond a form limit",
-        },
-        baseDocuments[4],
-      ]
-    : baseDocuments;
+  const documents = [...baseDocuments];
+  if (applicantCase.authorization.additionalBlankOriginalRequested) {
+    documents.splice(4, 0, {
+      id: "ssa827-additional",
+      name: "SSA-827",
+      detail: "Applicant-requested extra blank original",
+    });
+  }
+  if (hasContinuation) {
+    documents.splice(documents.length - 1, 0, {
+      id: "continuation",
+      name: "Continuation sheet",
+      detail: "Every item beyond a form limit",
+    });
+  }
   const [status, setStatus] = useState<GenerationStatus>("idle");
   const [activeDocument, setActiveDocument] = useState(0);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -275,6 +285,34 @@ export function PacketFlow() {
                 );
               })}
             </ol>
+
+            {status !== "complete" ? (
+              <label className="mt-5 flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-relaxed">
+                <input
+                  checked={
+                    applicantCase.authorization
+                      .additionalBlankOriginalRequested
+                  }
+                  className="mt-1 size-4 accent-primary"
+                  disabled={status === "generating"}
+                  onChange={(event) =>
+                    dispatch({
+                      type: "SET_ADDITIONAL_SSA827",
+                      requested: event.currentTarget.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  <span className="font-bold">
+                    Include one extra blank SSA-827 original
+                  </span>
+                  <span className="block text-muted">
+                    Use this only if SSA asked you for another original.
+                  </span>
+                </span>
+              </label>
+            ) : null}
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
               {status === "complete" && downloadUrl ? (

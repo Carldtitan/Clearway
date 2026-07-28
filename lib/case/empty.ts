@@ -49,7 +49,10 @@ export function createEmptyApplicantCase(): ApplicantCase {
     interviewTurns: [],
     providerCollectionComplete: false,
     recordRequests: [],
-    authorization: { signedAt: null },
+    authorization: {
+      signedAt: null,
+      additionalBlankOriginalRequested: false,
+    },
     documentState: {
       generatedRevision: null,
       status: "not_started",

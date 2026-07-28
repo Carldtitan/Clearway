@@ -238,6 +238,7 @@ export const syntheticApplicant: ApplicantCase = {
   ],
   authorization: {
     signedAt: "2025-08-20",
+    additionalBlankOriginalRequested: false,
   },
   documentState: {
     generatedRevision: null,
