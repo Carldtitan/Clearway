@@ -272,14 +272,54 @@ function RecordRow({
             />
           </div>
           {!received ? (
-            <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted">
-                Update this session when the records arrive.
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="text-sm leading-relaxed text-muted">
+                {item.request.portalAvailable
+                  ? "Check the patient portal before calling."
+                  : "No patient portal is listed. Call the records office."}
               </p>
-              <Button onClick={onMarkReceived} size="small" variant="secondary">
-                <Check aria-hidden="true" className="size-4" />
-                Mark received
-              </Button>
+              {item.action.script ? (
+                <blockquote className="mt-4 rounded-[var(--radius-control)] border border-border bg-surface p-4 text-sm leading-relaxed">
+                  {item.action.script}
+                </blockquote>
+              ) : null}
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {item.action.script ? (
+                    <>
+                      <a
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-border bg-surface px-3.5 py-2 text-sm font-bold transition-colors hover:border-primary/35 hover:bg-primary-soft/55"
+                        href={`tel:${item.request.providerPhone.replace(/\D/g, "")}`}
+                      >
+                        <Phone aria-hidden="true" className="size-4" />
+                        {item.request.providerPhone}
+                      </a>
+                      <CopyScript script={item.action.script} />
+                    </>
+                  ) : null}
+                </div>
+                <Button
+                  onClick={onMarkReceived}
+                  size="small"
+                  variant="secondary"
+                >
+                  <Check aria-hidden="true" className="size-4" />
+                  Mark received
+                </Button>
+              </div>
+              {item.action.escalationOptions ? (
+                <ul className="mt-4 grid gap-1.5 text-sm text-muted">
+                  {item.action.escalationOptions.map((option) => (
+                    <li className="flex gap-2" key={option}>
+                      <CircleAlert
+                        aria-hidden="true"
+                        className="mt-0.5 size-4 shrink-0"
+                      />
+                      {option}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ) : null}
         </div>
