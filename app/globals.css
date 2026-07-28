@@ -56,12 +56,18 @@ html {
 body {
   min-height: 100dvh;
   margin: 0;
-  background:
-    radial-gradient(circle at 80% 0%, oklch(0.96 0.03 356.8 / 0.7), transparent 32rem),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-atkinson), system-ui, sans-serif;
   text-rendering: optimizeLegibility;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input[type="date"] {
+  color-scheme: light;
 }
 
 button,

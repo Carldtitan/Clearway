@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Atkinson_Hyperlegible } from "next/font/google";
+
 import "./globals.css";
 
 const atkinson = Atkinson_Hyperlegible({
