@@ -80,77 +80,72 @@ export function Workspace() {
     >
       {applicantCase.conversationLocale ? (
         <aside className="hidden border-r border-border bg-surface lg:flex lg:min-h-dvh lg:flex-col lg:p-5">
-        <div className="flex items-center gap-3 px-2 py-1">
-          <BrandMark />
-          <div>
-            <p className="font-bold leading-none">Formless</p>
-            <p className="mt-1 text-xs text-muted">
-              {localized(copy.productDescription, locale)}
-            </p>
+          <div className="flex items-center gap-3 px-2 py-1">
+            <BrandMark />
+            <p className="text-lg font-bold leading-none">Formless</p>
           </div>
-        </div>
 
-        <nav aria-label="Application stages" className="mt-12">
-          <ol className="grid gap-1.5">
-            {stages.map((stage, index) => {
-              const Icon = stage.icon;
-              const active = activeStage === stage.id;
-              const reachable = index <= activeIndex;
-              const complete = index < activeIndex;
-              return (
-                <li key={stage.id}>
-                  <button
-                    aria-current={active ? "step" : undefined}
-                    className={cn(
-                      "flex min-h-12 w-full items-center gap-3 rounded-[var(--radius-control)] px-3 text-left font-bold transition-colors",
-                      active && "bg-primary-soft text-primary",
-                      !active &&
-                        reachable &&
-                        "cursor-pointer text-foreground hover:bg-surface-subtle",
-                      !reachable && "cursor-not-allowed text-muted/55",
-                    )}
-                    disabled={!reachable}
-                    onClick={() => navigate(stage.id)}
-                    type="button"
-                  >
-                    <span
+          <nav aria-label="Application stages" className="mt-12">
+            <ol className="grid gap-1.5">
+              {stages.map((stage, index) => {
+                const Icon = stage.icon;
+                const active = activeStage === stage.id;
+                const reachable = index <= activeIndex;
+                const complete = index < activeIndex;
+                return (
+                  <li key={stage.id}>
+                    <button
+                      aria-current={active ? "step" : undefined}
                       className={cn(
-                        "grid size-7 place-items-center rounded-lg",
-                        complete && "bg-success-soft text-success",
-                        active && "bg-surface text-primary",
+                        "flex min-h-12 w-full items-center gap-3 rounded-[var(--radius-control)] px-3 text-left font-bold transition-colors",
+                        active && "bg-primary-soft text-primary",
+                        !active &&
+                          reachable &&
+                          "cursor-pointer text-foreground hover:bg-surface-subtle",
+                        !reachable && "cursor-not-allowed text-muted/55",
                       )}
+                      disabled={!reachable}
+                      onClick={() => navigate(stage.id)}
+                      type="button"
                     >
-                      {complete ? (
-                        <ShieldCheck aria-hidden="true" className="size-4" />
-                      ) : (
-                        <Icon aria-hidden="true" className="size-4" />
-                      )}
-                    </span>
-                    <span>{stageLabel(stage.id, locale)}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
+                      <span
+                        className={cn(
+                          "grid size-7 place-items-center rounded-lg",
+                          complete && "bg-success-soft text-success",
+                          active && "bg-surface text-primary",
+                        )}
+                      >
+                        {complete ? (
+                          <ShieldCheck aria-hidden="true" className="size-4" />
+                        ) : (
+                          <Icon aria-hidden="true" className="size-4" />
+                        )}
+                      </span>
+                      <span>{stageLabel(stage.id, locale)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
         </aside>
       ) : null}
 
       <div className="min-w-0">
         {applicantCase.conversationLocale ? (
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-10">
-          <div className="flex items-center gap-2.5 lg:hidden">
-            <BrandMark />
-            <p className="font-bold">Formless</p>
-          </div>
-          <p className="hidden max-w-[48rem] text-sm text-muted lg:block">
-            {localized(copy.productDescription, locale)}
-          </p>
-          {applicantCase.conversationLocale ? (
-            <p className="text-xs font-bold text-muted">
-              {stageLabel(activeStage, locale)}
+            <div className="flex items-center gap-2.5 lg:hidden">
+              <BrandMark />
+              <p className="font-bold">Formless</p>
+            </div>
+            <p className="hidden max-w-[48rem] text-sm text-muted lg:block">
+              {localized(copy.productDescription, locale)}
             </p>
-          ) : null}
+            {applicantCase.conversationLocale ? (
+              <p className="text-xs font-bold text-muted">
+                {stageLabel(activeStage, locale)}
+              </p>
+            ) : null}
           </header>
         ) : null}
 
