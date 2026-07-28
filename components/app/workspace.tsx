@@ -17,6 +17,7 @@ import { BrandMark } from "@/components/app/brand-mark";
 import { useApplicantCase } from "@/components/app/case-context";
 import { CheckFlow } from "@/components/check/check-flow";
 import { InterviewFlow } from "@/components/interview/interview-flow";
+import { PacketFlow } from "@/components/packet/packet-flow";
 import { ReviewFlow } from "@/components/review/review-flow";
 import type { ApplicantCase } from "@/lib/case/types";
 import { cn } from "@/lib/utils";
@@ -167,9 +168,9 @@ export function Workspace() {
               {applicantCase.stage === "check" ? <CheckFlow /> : null}
               {applicantCase.stage === "interview" ? <InterviewFlow /> : null}
               {applicantCase.stage === "review" ? <ReviewFlow /> : null}
-              {applicantCase.stage === "packet" ||
-              applicantCase.stage === "records" ? (
-                <StagePlaceholder stage={applicantCase.stage} />
+              {applicantCase.stage === "packet" ? <PacketFlow /> : null}
+              {applicantCase.stage === "records" ? (
+                <StagePlaceholder stage="records" />
               ) : null}
             </motion.div>
           </AnimatePresence>
