@@ -7,6 +7,39 @@ export type ConfirmationState =
 
 export type CaptureSource = "voice" | "typed" | "seed";
 
+export type SupportedLocale = "en-US" | "es-US" | "zh-CN";
+
+export type ApplicationPhase =
+  | "language"
+  | "introduction"
+  | "document_readiness"
+  | "intake"
+  | "issue_resolution"
+  | "completion_review"
+  | "ready";
+
+export type UserStage = "application" | "documents" | "records";
+
+export type LegacyStage = "check" | "interview" | "review" | "packet";
+
+export type CollectionCompletionState =
+  | "unanswered"
+  | "in_progress"
+  | "complete_none"
+  | "complete_with_items";
+
+export type DocumentReadinessState =
+  | "ready"
+  | "not_available"
+  | "follow_up"
+  | "obtained";
+
+export interface DeferredItem {
+  questionId: string;
+  deferredAt: string;
+  reason: "unknown" | "come_back_later";
+}
+
 export interface Provenance {
   source: CaptureSource;
   state: ConfirmationState;
@@ -176,6 +209,8 @@ export interface InterviewTurn {
   source: "voice" | "typed" | "demo";
   status: "partial" | "final" | "extracting" | "extracted" | "failed";
   createdAt: string;
+  locale?: SupportedLocale;
+  canonicalSummary?: string;
 }
 
 export type RecordRequestStatus =
@@ -215,7 +250,20 @@ export interface DocumentState {
 export interface ApplicantCase {
   caseId: string;
   mode: "synthetic_demo" | "session";
-  stage: "check" | "interview" | "review" | "packet" | "records";
+  stage: UserStage | LegacyStage;
+  conversationLocale: SupportedLocale | null;
+  applicationPhase: ApplicationPhase;
+  activeQuestionId: string | null;
+  deferredItems: DeferredItem[];
+  documentReadiness: Record<string, DocumentReadinessState>;
+  collectionCompletion: {
+    providers: CollectionCompletionState;
+    medications: CollectionCompletionState;
+    jobs: CollectionCompletionState;
+    marriages: CollectionCompletionState;
+    children: CollectionCompletionState;
+  };
+  finalReviewApproved: boolean;
   applicant: PersonIdentity;
   eligibilityInput: EligibilityInput;
   conditions: Condition[];
@@ -288,6 +336,22 @@ export type CaseAction =
   | AddEntityAction
   | { type: "DELETE_ENTITY"; collection: CanonicalCollection; id: string }
   | { type: "SET_PROVIDER_COLLECTION_COMPLETE"; complete: boolean }
+  | { type: "SET_CONVERSATION_LOCALE"; locale: SupportedLocale }
+  | { type: "SET_APPLICATION_PHASE"; phase: ApplicationPhase }
+  | { type: "SET_ACTIVE_QUESTION"; questionId: string | null }
+  | { type: "DEFER_QUESTION"; item: DeferredItem }
+  | { type: "RESOLVE_DEFERRED_QUESTION"; questionId: string }
+  | {
+      type: "SET_DOCUMENT_READINESS";
+      documentId: string;
+      status: DocumentReadinessState;
+    }
+  | {
+      type: "SET_COLLECTION_COMPLETION";
+      collection: keyof ApplicantCase["collectionCompletion"];
+      status: CollectionCompletionState;
+    }
+  | { type: "SET_FINAL_REVIEW_APPROVED"; approved: boolean }
   | { type: "SET_ADDITIONAL_SSA827"; requested: boolean }
   | { type: "SET_STAGE"; stage: ApplicantCase["stage"] }
   | { type: "SET_DOCUMENT_STATE"; state: DocumentState }

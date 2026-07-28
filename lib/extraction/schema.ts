@@ -131,6 +131,7 @@ export const extractedFactSchema = z.object({
 
 export const interviewExtractionSchema = z.object({
   summary: z.string(),
+  confirmationText: z.string().optional(),
   followUpQuestion: z.string(),
   providerListStatus: z.enum(["complete", "more_possible", "unknown"]),
   facts: z.array(extractedFactSchema),
@@ -138,6 +139,7 @@ export const interviewExtractionSchema = z.object({
 
 export const extractionRequestSchema = z.object({
   turnId: z.string().min(1).max(100),
+  locale: z.enum(["en-US", "es-US", "zh-CN"]).default("en-US"),
   topic: z.string().trim().min(1).max(100).optional(),
   prompt: z.string().trim().min(1).max(1_000).optional(),
   transcript: z.string().trim().min(1).max(8_000),

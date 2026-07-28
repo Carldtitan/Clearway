@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import type { SupportedLocale } from "@/lib/case/types";
+import { localeDefinition } from "@/lib/i18n/locales";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const speakRequestSchema = z.object({
   text: z.string().trim().min(1).max(1_500),
+  locale: z.enum(["en-US", "es-US", "zh-CN"]).default("en-US"),
 });
 
 export async function POST(request: Request) {
@@ -19,10 +23,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const voiceId = voiceIdFor(parsed.data.locale);
   if (
     process.env.TTS_PROVIDER !== "elevenlabs" ||
     !process.env.ELEVENLABS_API_KEY ||
-    !process.env.ELEVENLABS_VOICE_ID
+    !voiceId
   ) {
     return noStore(
       NextResponse.json(
@@ -35,7 +40,7 @@ export async function POST(request: Request) {
   try {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
-        process.env.ELEVENLABS_VOICE_ID,
+        voiceId,
       )}?output_format=mp3_44100_128&enable_logging=false`,
       {
         method: "POST",
@@ -88,6 +93,15 @@ export async function POST(request: Request) {
       ),
     );
   }
+}
+
+function voiceIdFor(locale: SupportedLocale): string | undefined {
+  const definition = localeDefinition(locale);
+  const configured = process.env[definition.voiceEnvironmentKey];
+  if (configured) return configured;
+  if (locale === "en-US") return process.env.ELEVENLABS_VOICE_ID;
+  if (locale === "es-US") return "KHCvMklQZZo0O30ERnVn";
+  return "bhJUNIXWQQ94l8eI2VUf";
 }
 
 async function safeJson(request: Request): Promise<unknown> {

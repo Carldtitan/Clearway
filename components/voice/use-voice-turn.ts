@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { SupportedLocale } from "@/lib/case/types";
+
 export type VoiceTurnState =
   | "idle"
   | "requesting"
@@ -16,7 +18,7 @@ const NO_SPEECH_TIMEOUT_MS = 12_000;
 const MAX_ANSWER_MS = 30_000;
 const SPEECH_LEVEL = 0.022;
 
-export function useVoiceTurn() {
+export function useVoiceTurn(locale: SupportedLocale = "en-US") {
   const [state, setState] = useState<VoiceTurnState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [lastTranscript, setLastTranscript] = useState("");
@@ -141,7 +143,7 @@ export function useVoiceTurn() {
       const response = await fetch("/api/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, locale }),
       });
       if (response.ok) {
         const blob = await response.blob();
@@ -193,7 +195,7 @@ export function useVoiceTurn() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.92;
       utterance.pitch = 1;
-      utterance.lang = "en-US";
+      utterance.lang = locale;
       utterance.onend = () => resolve();
       utterance.onerror = () => resolve();
       utteranceRef.current = utterance;
@@ -202,7 +204,7 @@ export function useVoiceTurn() {
     });
     utteranceRef.current = null;
     setState("idle");
-  }, [unlockAudioOutput]);
+  }, [locale, unlockAudioOutput]);
 
   const listen = useCallback(async (): Promise<string> => {
     setError(null);
@@ -249,6 +251,7 @@ export function useVoiceTurn() {
             });
             const form = new FormData();
             form.append("audio", blob, "voice-answer.webm");
+            form.append("locale", locale);
             const response = await fetch("/api/transcribe", {
               method: "POST",
               body: form,
@@ -295,7 +298,7 @@ export function useVoiceTurn() {
         audioContextRef,
       });
     });
-  }, [ensureMicrophone, stopMeter]);
+  }, [ensureMicrophone, locale, stopMeter]);
 
   const ask = useCallback(
     async (prompt: string) => {

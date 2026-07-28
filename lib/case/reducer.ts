@@ -42,6 +42,68 @@ export function caseReducer(
       return changed(state, {
         ...state,
         providerCollectionComplete: action.complete,
+        collectionCompletion: {
+          ...state.collectionCompletion,
+          providers: action.complete
+            ? state.providers.length
+              ? "complete_with_items"
+              : "complete_none"
+            : state.providers.length
+              ? "in_progress"
+              : "unanswered",
+        },
+      });
+    case "SET_CONVERSATION_LOCALE":
+      return changed(state, {
+        ...state,
+        conversationLocale: action.locale,
+      });
+    case "SET_APPLICATION_PHASE":
+      return { ...state, applicationPhase: action.phase };
+    case "SET_ACTIVE_QUESTION":
+      return { ...state, activeQuestionId: action.questionId };
+    case "DEFER_QUESTION":
+      return {
+        ...state,
+        deferredItems: [
+          ...state.deferredItems.filter(
+            (item) => item.questionId !== action.item.questionId,
+          ),
+          action.item,
+        ],
+      };
+    case "RESOLVE_DEFERRED_QUESTION":
+      return {
+        ...state,
+        deferredItems: state.deferredItems.filter(
+          (item) => item.questionId !== action.questionId,
+        ),
+      };
+    case "SET_DOCUMENT_READINESS":
+      return {
+        ...state,
+        documentReadiness: {
+          ...state.documentReadiness,
+          [action.documentId]: action.status,
+        },
+      };
+    case "SET_COLLECTION_COMPLETION":
+      return changed(state, {
+        ...state,
+        collectionCompletion: {
+          ...state.collectionCompletion,
+          [action.collection]: action.status,
+        },
+        providerCollectionComplete:
+          action.collection === "providers"
+            ? action.status === "complete_none" ||
+              action.status === "complete_with_items"
+            : state.providerCollectionComplete,
+      });
+    case "SET_FINAL_REVIEW_APPROVED":
+      return changed(state, {
+        ...state,
+        finalReviewApproved: action.approved,
       });
     case "SET_ADDITIONAL_SSA827":
       return changed(state, {

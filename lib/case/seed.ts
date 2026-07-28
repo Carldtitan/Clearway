@@ -11,7 +11,25 @@ const address = {
 export const syntheticApplicant: ApplicantCase = {
   caseId: "demo-elena-rivera",
   mode: "synthetic_demo",
-  stage: "check",
+  stage: "application",
+  conversationLocale: "en-US",
+  applicationPhase: "ready",
+  activeQuestionId: null,
+  deferredItems: [],
+  documentReadiness: {
+    "birth-certificate": "ready",
+    ssn: "ready",
+    "photo-id": "ready",
+    banking: "ready",
+  },
+  collectionCompletion: {
+    providers: "complete_with_items",
+    medications: "complete_with_items",
+    jobs: "complete_with_items",
+    marriages: "complete_with_items",
+    children: "complete_with_items",
+  },
+  finalReviewApproved: true,
   applicant: {
     legalName: cv("Elena Rivera", "confirmed"),
     otherNames: cv([], "confirmed"),

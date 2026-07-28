@@ -33,6 +33,9 @@ Rules:
 - Dates use YYYY-MM-DD only when the speaker gives enough information. Otherwise preserve the spoken date phrase as the value.
 - Evidence text must be a short exact excerpt from the transcript.
 - Confidence reflects whether the transcript directly supports the value, not whether the value sounds plausible.
+- summary must be a concise English statement of the facts that will be stored in English SSA form fields.
+- confirmationText and followUpQuestion must use the requested conversation language.
+- Keep legal names, addresses, identifiers, numbers, and dates exactly as stated. Do not translate them.
 - Do not offer legal advice or decide eligibility.
 - Return only schema-conforming data.`;
 
@@ -69,10 +72,11 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "user",
-          content: `Interview topic: ${input.data.topic ?? "general"}
+          content: `Conversation locale: ${input.data.locale}
+Interview topic: ${input.data.topic ?? "general"}
 Question asked: ${input.data.prompt ?? "not provided"}
 
-Extract SSDI application facts from this answer:
+Extract English canonical SSDI application facts from this answer. Confirm the meaning in ${input.data.locale}:
 
 ${input.data.transcript}`,
         },

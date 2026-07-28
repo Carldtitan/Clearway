@@ -27,7 +27,25 @@ export const applicantCaseTransportSchema = z
   .object({
     caseId: z.string().min(1).max(100),
     mode: z.enum(["synthetic_demo", "session"]),
-    stage: z.enum(["check", "interview", "review", "packet", "records"]),
+    stage: z.enum([
+      "application",
+      "documents",
+      "records",
+      "check",
+      "interview",
+      "review",
+      "packet",
+    ]),
+    conversationLocale: z.enum(["en-US", "es-US", "zh-CN"]).nullable(),
+    applicationPhase: z.enum([
+      "language",
+      "introduction",
+      "document_readiness",
+      "intake",
+      "issue_resolution",
+      "completion_review",
+      "ready",
+    ]),
     applicant: z
       .object({
         legalName: canonicalSchema,

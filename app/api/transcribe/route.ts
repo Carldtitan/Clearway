@@ -1,6 +1,9 @@
 import { DeepgramClient } from "@deepgram/sdk";
 import { NextResponse } from "next/server";
 
+import type { SupportedLocale } from "@/lib/case/types";
+import { localeDefinition } from "@/lib/i18n/locales";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -18,6 +21,15 @@ export async function POST(request: Request) {
 
   const form = await request.formData();
   const audio = form.get("audio");
+  const locale = parseLocale(form.get("locale"));
+  if (!locale) {
+    return noStore(
+      NextResponse.json(
+        { error: "Choose a supported conversation language." },
+        { status: 400 },
+      ),
+    );
+  }
   if (!(audio instanceof Blob) || audio.size === 0) {
     return noStore(
       NextResponse.json(
@@ -39,9 +51,13 @@ export async function POST(request: Request) {
     const deepgram = new DeepgramClient({
       apiKey: process.env.DEEPGRAM_API_KEY,
     });
+    const speech = localeDefinition(locale);
     const response = await deepgram.listen.v1.media.transcribeFile(audio, {
-      model: process.env.DEEPGRAM_MODEL || "nova-3-medical",
-      language: "en-US",
+      model:
+        locale === "en-US"
+          ? process.env.DEEPGRAM_MODEL || speech.deepgramModel
+          : speech.deepgramModel,
+      language: speech.deepgramLanguage,
       punctuate: true,
       smart_format: true,
       paragraphs: true,
@@ -85,4 +101,10 @@ export async function POST(request: Request) {
 function noStore(response: NextResponse) {
   response.headers.set("Cache-Control", "no-store, max-age=0");
   return response;
+}
+
+function parseLocale(value: FormDataEntryValue | null): SupportedLocale | null {
+  return value === "en-US" || value === "es-US" || value === "zh-CN"
+    ? value
+    : null;
 }
