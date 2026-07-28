@@ -128,9 +128,22 @@ export const copy = {
     "zh-CN": "好的，我会使用这个回答。",
   },
   answerNotConfirmed: {
-    "en-US": "I won’t save that. Let’s try the question again.",
-    "es-US": "No guardaré esa respuesta. Intentemos la pregunta de nuevo.",
-    "zh-CN": "我不会保存这个回答。我们再回答一次。",
+    "en-US": "I won’t save that.",
+    "es-US": "No guardaré esa respuesta.",
+    "zh-CN": "我不会保存这个回答。",
+  },
+  correctionPrompt: {
+    "en-US":
+      "Thanks for catching that. I won’t save it. What should I put down instead?",
+    "es-US":
+      "Gracias por corregirme. No guardaré eso. ¿Qué debo anotar en su lugar?",
+    "zh-CN":
+      "谢谢您纠正我。我不会保存刚才的内容。请告诉我应该改成什么。",
+  },
+  correctionAcknowledged: {
+    "en-US": "Thanks for correcting me. Let me make sure I have it now.",
+    "es-US": "Gracias por corregirme. Déjeme confirmar que ahora lo entendí.",
+    "zh-CN": "谢谢您纠正我。让我确认这次是否听对了。",
   },
   requiredCannotSkip: {
     "en-US":

@@ -123,6 +123,90 @@ for (const scenario of [
   });
 }
 
+test("a rejected voice answer becomes a correction turn", async ({ page }) => {
+  await installSyntheticMicrophone(page);
+  const transcripts = [
+    "I'm ready",
+    "Alice Rivera",
+    "No, don't save that",
+    "Jane Rivera",
+    "yes",
+    "pause",
+  ];
+  const spokenPrompts: string[] = [];
+
+  await page.route("**/api/speak", async (route) => {
+    const request = route.request().postDataJSON() as { text: string };
+    spokenPrompts.push(request.text);
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Use browser speech in this test." }),
+    });
+  });
+  await page.route("**/api/transcribe", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ transcript: transcripts.shift() ?? "pause" }),
+    }),
+  );
+  await page.route("**/api/interview/extract", async (route) => {
+    const request = route.request().postDataJSON() as {
+      turnId: string;
+      transcript: string;
+    };
+    const legalName = request.transcript.includes("Jane")
+      ? "Jane Rivera"
+      : "Alice Rivera";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        turnId: request.turnId,
+        extraction: {
+          summary: `The applicant’s legal name is ${legalName}.`,
+          confirmationText: `I heard ${legalName}. Is that correct?`,
+          followUpQuestion: "",
+          providerListStatus: "unknown",
+          facts: [
+            {
+              kind: "scalar",
+              entityKey: "",
+              field: "applicant.legalName",
+              value: legalName,
+              confidence: 0.99,
+              evidenceText: legalName,
+            },
+          ],
+        },
+      }),
+    });
+  });
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /English EN/i }).click();
+
+  await expect(
+    page.getByRole("heading", {
+      name: /What is your Social Security number/i,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Jane Rivera", { exact: true }).first(),
+  ).toBeVisible();
+  expect(
+    spokenPrompts.filter(
+      (prompt) => prompt === "What is your full legal name?",
+    ),
+  ).toHaveLength(1);
+  expect(spokenPrompts).toContain(
+    "Thanks for catching that. I won’t save it. What should I put down instead?",
+  );
+  expect(transcripts).toEqual([]);
+});
+
 test("language is the first decision and removed workflow copy is absent", async ({
   page,
 }) => {

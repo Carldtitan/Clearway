@@ -31,6 +31,67 @@ export function parseLocalizedYesNo(
   return { ok: false };
 }
 
+export function correctionFromRejection(
+  transcript: string,
+  locale: SupportedLocale,
+): string | null {
+  const decision = parseLocalizedYesNo(transcript, locale);
+  if (!decision.ok || decision.value) return null;
+
+  let correction = transcript.trim();
+
+  if (locale === "en-US") {
+    correction = correction
+      .replace(
+        /^(?:no(?:pe)?|incorrect|not correct|that(?:'s| is) (?:wrong|not right))[\s,.:;!?-]*/i,
+        "",
+      )
+      .replace(
+        /^(?:(?:please\s+)?(?:don't|don’t|do not)\s+(?:save|use)(?:\s+(?:that|it|the answer))?|(?:disregard|ignore)(?:\s+(?:that|it|the answer))?)[\s,.:;!?-]*/i,
+        "",
+      )
+      .replace(
+        /^(?:actually|instead|rather|the correct answer is|the answer is|it(?:'s| is| should be)|that should be|please (?:put down|use)|(?:put down|use))[\s,.:;!?-]*/i,
+        "",
+      );
+  } else if (locale === "es-US") {
+    correction = correction
+      .replace(
+        /^(?:no|incorrect[oa]?|no es correcto|eso est[aá] mal)[\s,.:;!?¿¡-]*/i,
+        "",
+      )
+      .replace(
+        /^(?:(?:por favor\s+)?no\s+(?:guarde|use)(?:\s+(?:eso|esa respuesta|lo))?|(?:ignore|descarte)(?:\s+(?:eso|esa respuesta|lo))?)[\s,.:;!?¿¡-]*/i,
+        "",
+      )
+      .replace(
+        /^(?:en realidad|mejor|debe ser|la respuesta correcta es|la respuesta es|anote|use)[\s,.:;!?¿¡-]*/i,
+        "",
+      );
+  } else {
+    correction = correction
+      .replace(/^(?:不是|不对|错了|错误|不)[\s，。；：！？、-]*/, "")
+      .replace(
+        /^(?:请)?(?:不要保存|别保存|不要用|别用|忽略|删掉)(?:刚才的|那个|这个|答案)?[\s，。；：！？、-]*/,
+        "",
+      )
+      .replace(
+        /^(?:其实|应该是|正确答案是|请改成|改成|请填写|填写)[\s，。；：！？、-]*/,
+        "",
+      );
+  }
+
+  const cleaned = correction.trim();
+  if (
+    !cleaned ||
+    /^(?:please|thanks?|thank you)$/i.test(cleaned) ||
+    /^(?:por favor|gracias)$/i.test(cleaned)
+  ) {
+    return null;
+  }
+  return cleaned;
+}
+
 export function explicitNone(
   transcript: string,
   locale: SupportedLocale,

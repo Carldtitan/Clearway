@@ -32,6 +32,7 @@ import type {
 import {
   confirmationPrompt,
   confirmationRetry,
+  correctionFromRejection,
   explicitNone,
   parseLocalizedYesNo,
   readyAnswer,
@@ -101,6 +102,7 @@ export function GuidedApplication() {
   const [typedMode, setTypedMode] = useState(false);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [pending, setPending] = useState<PendingAnswer | null>(null);
+  const [repairPrompt, setRepairPrompt] = useState<string | null>(null);
   const [activatedStartLocale, setActivatedStartLocale] =
     useState<SupportedLocale | null>(null);
   const runIdRef = useRef(0);
@@ -337,6 +339,7 @@ export function GuidedApplication() {
     const runId = runIdRef.current;
     dispatch({ type: "SET_ACTIVE_QUESTION", questionId: question.id });
     setPending(null);
+    setRepairPrompt(null);
     setError(null);
     setTypedMode(false);
     setStatus("asking");
@@ -366,6 +369,7 @@ export function GuidedApplication() {
       setError(localized(copy.typeAnswer, locale));
       return;
     }
+    setRepairPrompt(null);
     const command = parseVoiceCommand(transcript, locale);
     if (command) {
       await handleCommand(command, question);
@@ -596,9 +600,23 @@ export function GuidedApplication() {
         continue;
       }
       if (!parsed.value) {
+        const inlineCorrection = correctionFromRejection(
+          confirmation,
+          locale,
+        );
         rejectPending(answer);
-        await voice.speak(localized(copy.answerNotConfirmed, locale));
-        await askQuestion(answer.question);
+        if (inlineCorrection) {
+          await voice.speak(
+            localized(copy.correctionAcknowledged, locale),
+          );
+          await processTranscript(
+            answer.question,
+            inlineCorrection,
+            "voice",
+          );
+          return;
+        }
+        await requestVoiceCorrection(answer.question);
         return;
       }
       commitPending(answer);
@@ -606,6 +624,36 @@ export function GuidedApplication() {
       window.setTimeout(() => void askAt(cursor), 120);
       return;
     }
+  }
+
+  async function requestVoiceCorrection(question: QuestionDefinition) {
+    const runId = runIdRef.current;
+    const prompt = localized(copy.correctionPrompt, locale);
+    setRepairPrompt(prompt);
+    setError(null);
+    setStatus("asking");
+    try {
+      const correction = await askContinuously(prompt, locale, runId);
+      if (runId !== runIdRef.current) return;
+      await processTranscript(question, correction, "voice");
+    } catch (correctionError) {
+      if (runId !== runIdRef.current) return;
+      setTypedMode(true);
+      setStatus("error");
+      setError(
+        isMicrophoneUnavailableError(correctionError)
+          ? microphoneUnavailable(locale)
+          : answerProcessingFailed(locale),
+      );
+    }
+  }
+
+  function requestTypedCorrection(answer: PendingAnswer) {
+    rejectPending(answer);
+    setRepairPrompt(localized(copy.correctionPrompt, locale));
+    setError(null);
+    setStatus("asking");
+    setTypedMode(true);
   }
 
   function commitPending(answer: PendingAnswer) {
@@ -807,7 +855,7 @@ export function GuidedApplication() {
   function confirmTyped(confirmed: boolean) {
     if (!pending) return;
     if (!confirmed) {
-      rejectPending(pending);
+      requestTypedCorrection(pending);
       return;
     }
     commitPending(pending);
@@ -817,6 +865,13 @@ export function GuidedApplication() {
   if (applicantCase.applicationPhase === "language") {
     return <LanguageSelection onSelect={chooseLanguage} />;
   }
+
+  const activePrompt = currentQuestion
+    ? status === "confirming" && pending
+      ? pending.extraction?.confirmationText?.trim() ||
+        confirmationPrompt(pending.summary, locale)
+      : repairPrompt ?? localized(currentQuestion.prompt, locale)
+    : localized(copy.introduction, locale);
 
   return (
     <div className="mx-auto grid w-full max-w-[75rem] gap-6 pb-24 pt-2 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-10 lg:pt-6">
@@ -879,30 +934,32 @@ export function GuidedApplication() {
                 <motion.div
                   animate={{ opacity: 1, y: 0 }}
                   initial={{ opacity: 0, y: 5 }}
-                  key={currentQuestion.id}
+                  key={`${currentQuestion.id}-${status}-${activePrompt}`}
                 >
                   <p className="text-sm font-bold text-muted">
                     {Math.min(cursor + 1, completion.total)} / {completion.total}
                   </p>
                   <h1 className="mt-3 max-w-[22ch] text-3xl font-bold leading-[1.08] tracking-[-0.035em] text-balance sm:text-4xl">
-                    {localized(currentQuestion.prompt, locale)}
+                    {activePrompt}
                   </h1>
-                  <button
-                    className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-control)] px-2 text-sm font-bold text-primary hover:bg-primary-soft"
-                    onClick={() =>
-                      void voice.speak(
-                        localized(currentQuestion.explanation, locale),
-                      )
-                    }
-                    type="button"
-                  >
-                    <CircleAlert aria-hidden="true" className="size-4" />
-                    {locale === "es-US"
-                      ? "Por qué se necesita"
-                      : locale === "zh-CN"
-                        ? "为什么需要"
-                        : "Why it is needed"}
-                  </button>
+                  {!repairPrompt && status !== "confirming" ? (
+                    <button
+                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-control)] px-2 text-sm font-bold text-primary hover:bg-primary-soft"
+                      onClick={() =>
+                        void voice.speak(
+                          localized(currentQuestion.explanation, locale),
+                        )
+                      }
+                      type="button"
+                    >
+                      <CircleAlert aria-hidden="true" className="size-4" />
+                      {locale === "es-US"
+                        ? "Por qué se necesita"
+                        : locale === "zh-CN"
+                          ? "为什么需要"
+                          : "Why it is needed"}
+                    </button>
+                  ) : null}
                 </motion.div>
               </AnimatePresence>
             ) : null}
@@ -969,11 +1026,7 @@ export function GuidedApplication() {
                 else voice.pause();
               }}
               onRepeat={() =>
-                currentQuestion
-                  ? void voice.speak(
-                      localized(currentQuestion.prompt, locale),
-                    )
-                  : void voice.speak(localized(copy.introduction, locale))
+                void voice.speak(activePrompt)
               }
               onType={() => setTypedMode((visible) => !visible)}
               showTypeAction={!typedMode}

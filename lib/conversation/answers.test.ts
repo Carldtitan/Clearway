@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  correctionFromRejection,
   explicitNone,
   parseLocalizedYesNo,
   readyAnswer,
@@ -29,5 +30,31 @@ describe("localized conversation answers", () => {
       ok: true,
       value: true,
     });
+  });
+
+  it("keeps a replacement supplied with a rejected confirmation", () => {
+    expect(
+      correctionFromRejection(
+        "No, don’t save that. It should be Jane Rivera.",
+        "en-US",
+      ),
+    ).toBe("Jane Rivera.");
+    expect(
+      correctionFromRejection(
+        "No, no guarde eso. Debe ser Juana Rivera.",
+        "es-US",
+      ),
+    ).toBe("Juana Rivera.");
+    expect(
+      correctionFromRejection("不对，不要保存，应该是李明。", "zh-CN"),
+    ).toBe("李明。");
+  });
+
+  it("asks for a correction when a rejection has no replacement", () => {
+    expect(
+      correctionFromRejection("No, don’t save that.", "en-US"),
+    ).toBeNull();
+    expect(correctionFromRejection("No, no guarde eso.", "es-US")).toBeNull();
+    expect(correctionFromRejection("不对，不要保存。", "zh-CN")).toBeNull();
   });
 });

@@ -15,6 +15,10 @@ const voiceMocks = vi.hoisted(() => ({
   speak: vi.fn(),
 }));
 
+const extractionMocks = vi.hoisted(() => ({
+  request: vi.fn(),
+}));
+
 vi.mock("@/components/voice/use-voice-turn", () => ({
   useVoiceTurn: () => ({
     ...voiceMocks,
@@ -29,12 +33,36 @@ vi.mock("@/components/voice/use-voice-turn", () => ({
   }),
 }));
 
+vi.mock("@/lib/extraction/client", () => ({
+  requestInterviewExtraction: extractionMocks.request,
+}));
+
 beforeEach(() => {
   voiceMocks.activate.mockReset().mockResolvedValue(undefined);
   voiceMocks.speak.mockReset().mockResolvedValue(undefined);
   voiceMocks.listen
     .mockReset()
     .mockImplementation(() => new Promise(() => undefined));
+  extractionMocks.request
+    .mockReset()
+    .mockImplementation(
+      async ({ transcript }: { transcript: string }) => ({
+        summary: transcript,
+        confirmationText: `I heard ${transcript}. Is that correct?`,
+        followUpQuestion: "",
+        providerListStatus: "unknown",
+        facts: [
+          {
+            kind: "scalar",
+            entityKey: "",
+            field: "applicant.legalName",
+            value: transcript,
+            confidence: 0.99,
+            evidenceText: transcript,
+          },
+        ],
+      }),
+    );
 });
 
 describe("GuidedApplication", () => {
@@ -136,5 +164,46 @@ describe("GuidedApplication", () => {
     expect(
       screen.queryByText(/The microphone is unavailable/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("turns a rejected answer into a correction conversation", async () => {
+    const user = userEvent.setup();
+    voiceMocks.listen
+      .mockReset()
+      .mockResolvedValueOnce("I'm ready")
+      .mockResolvedValueOnce("Alice Rivera")
+      .mockResolvedValueOnce("No, don't save that")
+      .mockResolvedValueOnce("Jane Rivera")
+      .mockResolvedValueOnce("yes")
+      .mockImplementation(() => new Promise(() => undefined));
+
+    render(
+      <CaseProvider>
+        <GuidedApplication />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /EnglishEN/i }));
+
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        "Thanks for catching that. I won’t save it. What should I put down instead?",
+      ),
+    );
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        expect.stringContaining("I heard Jane Rivera."),
+      ),
+    );
+
+    const originalQuestionCalls = voiceMocks.speak.mock.calls.filter(
+      ([message]) => message === "What is your full legal name?",
+    );
+    expect(originalQuestionCalls).toHaveLength(1);
+    expect(extractionMocks.request).toHaveBeenCalledTimes(2);
+    expect(extractionMocks.request).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ transcript: "Jane Rivera" }),
+    );
   });
 });
