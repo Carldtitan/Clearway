@@ -117,6 +117,13 @@ export function GuidedApplication() {
     caseRef.current = applicantCase;
   }, [applicantCase]);
 
+  useEffect(
+    () => () => {
+      runIdRef.current += 1;
+    },
+    [],
+  );
+
   useEffect(() => {
     if (
       activatedStartLocale === locale &&
@@ -136,6 +143,40 @@ export function GuidedApplication() {
     // Locale state must render before localized speech/listen resumes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activatedStartLocale, locale]);
+
+  async function listenContinuously(
+    selectedLocale: SupportedLocale,
+    expectedRunId: number,
+  ): Promise<string> {
+    while (expectedRunId === runIdRef.current) {
+      try {
+        const transcript = await voice.listen();
+        setError(null);
+        return transcript;
+      } catch (listeningError) {
+        if (
+          expectedRunId !== runIdRef.current ||
+          isMicrophoneUnavailableError(listeningError)
+        ) {
+          throw listeningError;
+        }
+        const message = listeningAgain(selectedLocale);
+        setStatus("waiting");
+        setError(message);
+        await voice.speak(message);
+      }
+    }
+    throw new Error("The conversation moved to another step.");
+  }
+
+  async function askContinuously(
+    prompt: string,
+    selectedLocale: SupportedLocale,
+    expectedRunId = runIdRef.current,
+  ) {
+    await voice.speak(prompt);
+    return listenContinuously(selectedLocale, expectedRunId);
+  }
 
   async function chooseLanguage(nextLocale: SupportedLocale) {
     const runId = ++runIdRef.current;
@@ -176,14 +217,18 @@ export function GuidedApplication() {
         phase: "document_readiness",
       });
       setStatus("waiting");
-      const answer = await voice.listen();
+      const answer = await listenContinuously(nextLocale, runId);
       if (runId !== runIdRef.current) return;
       if (readyAnswer(answer, nextLocale)) {
         markRemainingPreparationReady();
         beginIntake();
       } else {
         trackMissingPreparation(answer, nextLocale);
-        const nextAnswer = await voice.ask(readinessNoted(nextLocale));
+        const nextAnswer = await askContinuously(
+          readinessNoted(nextLocale),
+          nextLocale,
+          runId,
+        );
         if (readyAnswer(nextAnswer, nextLocale)) {
           markRemainingPreparationReady();
           beginIntake();
@@ -296,7 +341,11 @@ export function GuidedApplication() {
     setTypedMode(false);
     setStatus("asking");
     try {
-      const transcript = await voice.ask(localized(question.prompt, locale));
+      const transcript = await askContinuously(
+        localized(question.prompt, locale),
+        locale,
+        runId,
+      );
       if (runId !== runIdRef.current) return;
       await processTranscript(question, transcript, "voice");
     } catch {
@@ -360,9 +409,11 @@ export function GuidedApplication() {
       setTypedMode(true);
       setStatus("error");
       setError(
-        locale === "en-US" && processingError instanceof Error
-          ? processingError.message
-          : answerProcessingFailed(locale),
+        isMicrophoneUnavailableError(processingError)
+          ? microphoneUnavailable(locale)
+          : locale === "en-US" && processingError instanceof Error
+            ? processingError.message
+            : answerProcessingFailed(locale),
       );
     }
   }
@@ -529,15 +580,19 @@ export function GuidedApplication() {
   }
 
   async function confirmVoiceAnswer(answer: PendingAnswer) {
-    let confirmation = await voice.ask(
+    let confirmation = await askContinuously(
       answer.extraction?.confirmationText?.trim()
         ? `${answer.extraction.confirmationText} ${confirmationRetry(locale)}`
         : confirmationPrompt(answer.summary, locale),
+      locale,
     );
     for (;;) {
       const parsed = parseLocalizedYesNo(confirmation, locale);
       if (!parsed.ok) {
-        confirmation = await voice.ask(confirmationRetry(locale));
+        confirmation = await askContinuously(
+          confirmationRetry(locale),
+          locale,
+        );
         continue;
       }
       if (!parsed.value) {
@@ -620,8 +675,9 @@ export function GuidedApplication() {
         return;
       }
       case "correct": {
-        const confirmation = await voice.ask(
+        const confirmation = await askContinuously(
           correctionTargetPrompt(question, locale),
+          locale,
         );
         const parsed = parseLocalizedYesNo(confirmation, locale);
         if (parsed.ok && parsed.value) {
@@ -701,7 +757,10 @@ export function GuidedApplication() {
       await voice.speak(unresolvedMessage(unresolved.length, locale));
       return;
     }
-    const confirmation = await voice.ask(finalReviewPrompt(locale));
+    const confirmation = await askContinuously(
+      finalReviewPrompt(locale),
+      locale,
+    );
     const parsed = parseLocalizedYesNo(confirmation, locale);
     if (parsed.ok && parsed.value) {
       dispatch({ type: "SET_FINAL_REVIEW_APPROVED", approved: true });
@@ -1057,7 +1116,7 @@ function VoiceState({
         : state === "processing" || status === "extracting"
           ? "Checking your answer"
           : state === "error" || status === "error"
-            ? "Microphone unavailable"
+            ? "Listening paused"
           : status === "paused"
             ? "Paused"
             : "Ready";
@@ -1086,9 +1145,9 @@ function voiceStateTranslation(
       "es-US": "Revisando su respuesta",
       "zh-CN": "正在核对您的回答",
     },
-    "Microphone unavailable": {
-      "es-US": "Micrófono no disponible",
-      "zh-CN": "麦克风不可用",
+    "Listening paused": {
+      "es-US": "Escucha en pausa",
+      "zh-CN": "聆听已暂停",
     },
     Paused: { "es-US": "En pausa", "zh-CN": "已暂停" },
     Ready: { "es-US": "Listo", "zh-CN": "准备就绪" },
@@ -1449,6 +1508,30 @@ function microphoneUnavailable(locale: SupportedLocale) {
       "El micrófono no está disponible. Escriba su respuesta a continuación.",
     "zh-CN": "麦克风不可用。请在下方输入您的回答。",
   }[locale];
+}
+
+function listeningAgain(locale: SupportedLocale) {
+  return {
+    "en-US": "I didn’t catch that. I’m still listening.",
+    "es-US": "No entendí eso. Sigo escuchando.",
+    "zh-CN": "我没有听清。我还在继续听。",
+  }[locale];
+}
+
+function isMicrophoneUnavailableError(error: unknown) {
+  if (error instanceof DOMException) {
+    return [
+      "AbortError",
+      "NotAllowedError",
+      "NotFoundError",
+      "NotReadableError",
+      "SecurityError",
+    ].includes(error.name);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /microphone access|permission denied|requested device not found|voice recording is not supported|could not start audio source/i.test(
+    message,
+  );
 }
 
 function answerProcessingFailed(locale: SupportedLocale) {

@@ -106,4 +106,35 @@ describe("GuidedApplication", () => {
       screen.getByRole("combobox", { name: "Conversation language" }),
     ).toHaveValue("es-US");
   });
+
+  it("returns to listening when transcription misses an answer", async () => {
+    const user = userEvent.setup();
+    voiceMocks.listen
+      .mockReset()
+      .mockRejectedValueOnce(new Error("No clear transcript"))
+      .mockResolvedValueOnce("I'm ready")
+      .mockImplementation(() => new Promise(() => undefined));
+
+    render(
+      <CaseProvider>
+        <GuidedApplication />
+      </CaseProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /EnglishEN/i }));
+
+    await waitFor(() =>
+      expect(voiceMocks.speak).toHaveBeenCalledWith(
+        "I didn’t catch that. I’m still listening.",
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "What is your full legal name?",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/The microphone is unavailable/i),
+    ).not.toBeInTheDocument();
+  });
 });

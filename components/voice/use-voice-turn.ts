@@ -14,7 +14,6 @@ export type VoiceTurnState =
   | "error";
 
 const SILENCE_AFTER_SPEECH_MS = 1_350;
-const NO_SPEECH_TIMEOUT_MS = 12_000;
 const MAX_ANSWER_MS = 30_000;
 const SPEECH_LEVEL = 0.022;
 
@@ -115,13 +114,13 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       await ensureMicrophone();
       setState("idle");
     } catch (activationError) {
-      const message =
+      const failure =
         activationError instanceof Error
-          ? activationError.message
-          : "Microphone access did not work.";
-      setError(message);
+          ? activationError
+          : new Error("Microphone access did not work.");
+      setError(failure.message);
       setState("error");
-      throw new Error(message);
+      throw failure;
     }
   }, [ensureMicrophone, unlockAudioOutput]);
 
@@ -288,10 +287,7 @@ export function useVoiceTurn(locale: SupportedLocale = "en-US") {
       startSilenceMeter({
         stream,
         onLevel: setLevel,
-        onStop: (heardSpeech) => {
-          if (!heardSpeech) {
-            shouldTranscribeRef.current = false;
-          }
+        onStop: () => {
           if (recorder.state !== "inactive") recorder.stop();
         },
         animationRef,
@@ -362,7 +358,7 @@ function startSilenceMeter({
   animationRef: React.MutableRefObject<number | null>;
   audioContextRef: React.MutableRefObject<AudioContext | null>;
   onLevel: (level: number) => void;
-  onStop: (heardSpeech: boolean) => void;
+  onStop: () => void;
   stream: MediaStream;
 }) {
   const AudioContextConstructor =
@@ -373,7 +369,8 @@ function startSilenceMeter({
       }
     ).webkitAudioContext;
   if (!AudioContextConstructor) {
-    window.setTimeout(() => onStop(true), MAX_ANSWER_MS);
+    // Keep recording until the applicant uses the visible "done speaking"
+    // control when voice activity detection is unavailable.
     return;
   }
   const context = new AudioContextConstructor();
@@ -402,19 +399,32 @@ function startSilenceMeter({
       lastSpeechAt = now;
     }
     if (
-      (heardSpeech &&
-        now - lastSpeechAt >= SILENCE_AFTER_SPEECH_MS &&
-        now - startedAt >= 1_800) ||
-      now - startedAt >= MAX_ANSWER_MS
+      shouldFinishRecording({
+        elapsedMs: now - startedAt,
+        heardSpeech,
+        silenceMs: now - lastSpeechAt,
+      })
     ) {
-      onStop(heardSpeech);
-      return;
-    }
-    if (!heardSpeech && now - startedAt >= NO_SPEECH_TIMEOUT_MS) {
-      onStop(false);
+      onStop();
       return;
     }
     animationRef.current = window.requestAnimationFrame(tick);
   };
   animationRef.current = window.requestAnimationFrame(tick);
+}
+
+export function shouldFinishRecording({
+  elapsedMs,
+  heardSpeech,
+  silenceMs,
+}: {
+  elapsedMs: number;
+  heardSpeech: boolean;
+  silenceMs: number;
+}) {
+  if (!heardSpeech) return false;
+  return (
+    (elapsedMs >= 1_800 && silenceMs >= SILENCE_AFTER_SPEECH_MS) ||
+    elapsedMs >= MAX_ANSWER_MS
+  );
 }
