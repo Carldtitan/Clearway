@@ -183,20 +183,32 @@ function mapPath(
 ): ApplicantCase {
   const parts = path.split(".");
   const clone = structuredClone(state) as unknown as Record<string, unknown>;
-  let cursor: Record<string, unknown> = clone;
+  let cursor: unknown = clone;
   for (let index = 0; index < parts.length - 1; index += 1) {
-    const next = cursor[parts[index]];
-    if (!next || typeof next !== "object" || Array.isArray(next)) {
+    const part = parts[index];
+    const next = Array.isArray(cursor)
+      ? cursor[Number(part)]
+      : isRecord(cursor)
+        ? cursor[part]
+        : undefined;
+    if (!next || typeof next !== "object") {
       throw new Error(`Unsupported canonical path: ${path}`);
     }
-    cursor = next as Record<string, unknown>;
+    cursor = next;
   }
   const key = parts.at(-1);
   if (!key) throw new Error(`Unsupported canonical path: ${path}`);
+  if (!isRecord(cursor)) {
+    throw new Error(`Unsupported canonical path: ${path}`);
+  }
   const current = cursor[key];
   if (!current || typeof current !== "object" || !("provenance" in current)) {
     throw new Error(`Path is not a canonical value: ${path}`);
   }
   cursor[key] = mapper(current as CanonicalValue<unknown>);
   return clone as unknown as ApplicantCase;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
