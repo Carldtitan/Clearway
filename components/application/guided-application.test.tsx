@@ -160,11 +160,12 @@ describe("GuidedApplication", () => {
       </CaseProvider>,
     );
 
-    await user.click(
-      screen.getByRole("button", {
-        name: "Skip audio and answer now",
-      }),
-    );
+    const skipButton = screen.getByRole("button", {
+      name: "Skip audio and answer now",
+    });
+    expect(skipButton).toHaveTextContent("Skip");
+
+    await user.click(skipButton);
 
     expect(voiceMocks.skipSpeech).toHaveBeenCalledOnce();
   });
