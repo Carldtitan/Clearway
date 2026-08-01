@@ -64,10 +64,18 @@ function createWindowsControl({ emit }) {
       const target = elementMap.get(request.args.elementId);
       if (!target) throw new Error("That Windows control is no longer visible. Observe the screen again.");
       assertSafeElement(target);
-      nativeObservation = await runPowerShell("ActAndObserve", {
-        tool: request.tool,
-        args: withWindowTarget({ selector: target.selector }, lastObservation),
-      });
+      try {
+        nativeObservation = await runPowerShell("ActAndObserve", {
+          tool: request.tool,
+          args: withWindowTarget({ selector: target.selector }, lastObservation),
+        });
+      } catch (error) {
+        if (!isStaleControlError(error) || !hasUsableBounds(target.bounds)) throw error;
+        nativeObservation = await runPowerShell("ActAndObserve", {
+          tool: "click",
+          args: withWindowTarget(centerPoint(target.bounds), lastObservation),
+        });
+      }
     } else if (request.tool === "click") {
       nativeObservation = await runPowerShell("ActAndObserve", {
         tool: request.tool,
@@ -201,11 +209,23 @@ async function focusLaunchedWindow(title) {
 
 async function runPowerShell(action, payload) {
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
-  const { stdout } = await execFileAsync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", SCRIPT_PATH, "-Action", action, "-PayloadBase64", encoded],
-    { encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: 12_000, windowsHide: true },
-  );
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", SCRIPT_PATH, "-Action", action, "-PayloadBase64", encoded],
+      { encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: 12_000, windowsHide: true },
+    ));
+  } catch (error) {
+    const diagnostic = `${error?.stderr || ""} ${error?.message || ""}`;
+    if (/control is no longer available/i.test(diagnostic)) {
+      throw new Error("The Windows control changed before Clearway could use it.");
+    }
+    if (/timed out|ETIMEDOUT/i.test(diagnostic)) {
+      throw new Error("Windows took too long to complete that accessibility action.");
+    }
+    throw new Error("Windows could not complete that accessibility action.");
+  }
   const trimmed = stdout.trim();
   if (!trimmed) return {};
   try {
@@ -213,6 +233,21 @@ async function runPowerShell(action, payload) {
   } catch {
     throw new Error("Windows returned an unreadable accessibility response.");
   }
+}
+
+function isStaleControlError(error) {
+  return error instanceof Error && /control changed|no longer available/i.test(error.message);
+}
+
+function hasUsableBounds(bounds) {
+  return Number(bounds?.width) > 0 && Number(bounds?.height) > 0;
+}
+
+function centerPoint(bounds) {
+  return {
+    x: Math.round(Number(bounds.x) + Number(bounds.width) / 2),
+    y: Math.round(Number(bounds.y) + Number(bounds.height) / 2),
+  };
 }
 
 function selectorFor(element) {

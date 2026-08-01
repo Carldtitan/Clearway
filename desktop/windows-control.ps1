@@ -126,16 +126,43 @@ function Get-Elements($root) {
 }
 
 function Find-Element($root, $selector) {
-  $conditions = New-Object System.Collections.Generic.List[Windows.Automation.Condition]
+  if ($null -eq $root) { return $null }
+
+  # Automation IDs are more stable than accessible names in File Explorer.
+  # Explorer changes labels such as "Search Home" after navigation or focus.
   if ($selector.automationId) {
-    $conditions.Add((New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::AutomationIdProperty, [string]$selector.automationId)))
+    $idCondition = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::AutomationIdProperty, [string]$selector.automationId)
+    $idMatches = $root.FindAll([Windows.Automation.TreeScope]::Descendants, $idCondition)
+    foreach ($match in $idMatches) {
+      try {
+        if (-not $selector.controlType -or (Get-ControlTypeName $match.Current.ControlType) -eq [string]$selector.controlType) {
+          return $match
+        }
+      } catch {}
+    }
   }
+
   if ($selector.name) {
-    $conditions.Add((New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty, [string]$selector.name)))
+    $nameCondition = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty, [string]$selector.name)
+    $nameMatches = $root.FindAll([Windows.Automation.TreeScope]::Descendants, $nameCondition)
+    foreach ($match in $nameMatches) {
+      try {
+        if (-not $selector.controlType -or (Get-ControlTypeName $match.Current.ControlType) -eq [string]$selector.controlType) {
+          return $match
+        }
+      } catch {}
+    }
+
+    $wantedName = ([string]$selector.name).Trim()
+    $allControls = $root.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition)
+    foreach ($match in $allControls) {
+      try {
+        $sameType = -not $selector.controlType -or (Get-ControlTypeName $match.Current.ControlType) -eq [string]$selector.controlType
+        if ($sameType -and $match.Current.Name.Trim() -eq $wantedName) { return $match }
+      } catch {}
+    }
   }
-  if ($conditions.Count -eq 0) { return $null }
-  $condition = if ($conditions.Count -eq 1) { $conditions[0] } else { New-Object Windows.Automation.AndCondition($conditions.ToArray()) }
-  return $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+  return $null
 }
 
 function Invoke-Element($element) {

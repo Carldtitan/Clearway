@@ -508,7 +508,9 @@ function collectCandidates(result: ComputerToolResult, target: Map<string, Candi
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
+  if (!(error instanceof Error) || !error.message) return fallback;
+  const remoteMessage = error.message.match(/Error invoking remote method '[^']+': Error: ([^\r\n]+)/i)?.[1];
+  return remoteMessage || error.message.split(/\r?\n/, 1)[0];
 }
 
 function voiceRequestPrompt(locale: SupportedLocale) {
