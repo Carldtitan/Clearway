@@ -99,7 +99,6 @@ describe("GuidedApplication", () => {
       expect.stringContaining("English"),
       expect.stringContaining("Español"),
       expect.stringContaining("中文（普通话）"),
-      "Load Elena Rivera sample case",
     ]);
     expect(screen.queryByText("Check")).not.toBeInTheDocument();
     expect(screen.queryByText("Review")).not.toBeInTheDocument();
@@ -440,15 +439,31 @@ describe("GuidedApplication", () => {
 
   it("loads Elena's sample answers without faking computer-use results", async () => {
     const user = userEvent.setup();
+    const inProgressCase = structuredClone(syntheticApplicant);
+    inProgressCase.mode = "session";
+    inProgressCase.applicationPhase = "intake";
+    inProgressCase.activeQuestionId = "ssn";
+    inProgressCase.finalReviewApproved = false;
+    inProgressCase.applicant.legalName.value = "Original Applicant";
     render(
-      <CaseProvider>
+      <CaseProvider initialCase={inProgressCase}>
         <GuidedApplication />
         <CaseProbe />
       </CaseProvider>,
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Load Elena Rivera sample case" }),
+      screen.getByRole("button", { name: "Fill demo application" }),
+    );
+    expect(
+      screen.getByRole("dialog", {
+        name: "Replace these answers with Elena Rivera’s sample?",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/real Windows files/i)).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Load Elena sample" }),
     );
 
     expect(
@@ -456,7 +471,6 @@ describe("GuidedApplication", () => {
         name: "Elena Rivera’s sample application is ready.",
       }),
     ).toBeVisible();
-    expect(screen.getByText(/file searches remain live/i)).toBeVisible();
     expect(screen.getByTestId("case-mode")).toHaveTextContent("synthetic_demo");
 
     await user.click(

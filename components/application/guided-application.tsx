@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   CircleAlert,
+  FileCheck2,
   Keyboard,
   Mic,
   Pause,
@@ -11,7 +12,9 @@ import {
   Send,
   SkipForward,
   Volume2,
+  X,
 } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
@@ -1037,13 +1040,24 @@ export function GuidedApplication() {
     setStatus("complete");
   }
 
+  function pauseForSampleDialog() {
+    ++runIdRef.current;
+    voice.cancel();
+    setVoiceSessionActive(false);
+    setStatus("paused");
+  }
+
+  function resumeAfterSampleDialog() {
+    setVoiceSessionActive(true);
+    setError(null);
+    if (currentQuestion) {
+      setStatus("asking");
+      window.setTimeout(() => void askQuestion(currentQuestion), 120);
+    }
+  }
+
   if (applicantCase.applicationPhase === "language") {
-    return (
-      <LanguageSelection
-        onLoadSample={loadElenaSample}
-        onSelect={chooseLanguage}
-      />
-    );
+    return <LanguageSelection onSelect={chooseLanguage} />;
   }
 
   const activePrompt = currentQuestion
@@ -1065,6 +1079,13 @@ export function GuidedApplication() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {currentQuestion && !sampleCaseReady ? (
+              <SampleFillDialog
+                onCancel={resumeAfterSampleDialog}
+                onConfirm={loadElenaSample}
+                onOpen={pauseForSampleDialog}
+              />
+            ) : null}
             <LanguageMenu
               locale={locale}
               onChange={(nextLocale) => {
@@ -1253,10 +1274,8 @@ export function GuidedApplication() {
 }
 
 function LanguageSelection({
-  onLoadSample,
   onSelect,
 }: {
-  onLoadSample: () => void;
   onSelect: (locale: SupportedLocale) => void;
 }) {
   return (
@@ -1290,22 +1309,82 @@ function LanguageSelection({
               </motion.button>
             ))}
           </div>
-          <div className="mt-7 border-t border-border pt-6">
-            <Button onClick={onLoadSample} variant="secondary">
-              <CheckCircle2 aria-hidden="true" className="size-5" />
-              Load Elena Rivera sample case
-            </Button>
-            <p className="mt-3 max-w-[42rem] text-sm leading-relaxed text-muted">
-              Skips the intake with sample application answers. Computer file
-              searches still use real Windows files and live results.
-            </p>
-          </div>
         </div>
         <div className="mx-auto size-60 [mask-image:radial-gradient(circle,black_58%,transparent_74%)] lg:size-72">
           <Orb backgroundColor="#fcf9fb" hoverIntensity={0.28} hue={330} />
         </div>
       </div>
     </section>
+  );
+}
+
+function SampleFillDialog({
+  onCancel,
+  onConfirm,
+  onOpen,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  onOpen: () => void;
+}) {
+  const confirmedRef = useRef(false);
+  return (
+    <Dialog.Root
+      onOpenChange={(open) => {
+        if (open) {
+          confirmedRef.current = false;
+          onOpen();
+          return;
+        }
+        if (!confirmedRef.current) onCancel();
+        confirmedRef.current = false;
+      }}
+    >
+      <Dialog.Trigger asChild>
+        <Button
+          aria-label="Fill demo application"
+          size="small"
+          variant="secondary"
+        >
+          <FileCheck2 aria-hidden="true" className="size-4" />
+          <span className="hidden sm:inline">Fill demo application</span>
+          <span className="sm:hidden">Demo</span>
+        </Button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-foreground/35" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[1.15rem] bg-surface p-6 shadow-[0_28px_90px_oklch(0_0_0/0.24)] sm:p-7">
+          <Dialog.Title className="pr-10 text-2xl font-bold tracking-[-0.025em]">
+            Replace these answers with Elena Rivera’s sample?
+          </Dialog.Title>
+          <Dialog.Description className="mt-3 leading-relaxed text-muted">
+            This replaces the current application answers. It does not create
+            computer-search results; those still come from real Windows files.
+          </Dialog.Description>
+          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Dialog.Close asChild>
+              <Button variant="secondary">Keep current answers</Button>
+            </Dialog.Close>
+            <Dialog.Close asChild>
+              <Button
+                onClick={() => {
+                  confirmedRef.current = true;
+                  onConfirm();
+                }}
+              >
+                Load Elena sample
+              </Button>
+            </Dialog.Close>
+          </div>
+          <Dialog.Close
+            aria-label="Close"
+            className="absolute right-4 top-4 grid size-10 place-items-center rounded-[var(--radius-control)] text-muted transition-colors hover:bg-surface-subtle hover:text-foreground"
+          >
+            <X aria-hidden="true" className="size-5" />
+          </Dialog.Close>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
