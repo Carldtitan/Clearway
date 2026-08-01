@@ -6,60 +6,60 @@ This plan implements the Clearway requirements and design in dependency order. N
 
 ## Tasks
 
-- [ ] 1. Establish the Clearway specification and identity — 15 minutes
-  - [ ] 1.1 Create the interconnected requirements, design, and tasks documents.
+- [x] 1. Establish the Clearway specification and identity — 15 minutes
+  - [x] 1.1 Create the interconnected requirements, design, and tasks documents.
     - _Requirements: C1.3_
     - **Verification:** all three files exist under `specs/clearway/`, and design/tasks reference requirement IDs.
-  - [ ] 1.2 Rename product, package, translations, packet metadata, downloads, documentation, and tests to Clearway.
+  - [x] 1.2 Rename product, package, translations, packet metadata, downloads, documentation, and tests to Clearway.
     - _Requirements: C1.1-C1.2_
     - **Verification:** retired-brand scans across tracked text and filenames return no matches.
-  - [ ] 1.3 Remove the runtime synthetic loader, query-parameter demo path, prerecorded fallback, and visible Demo action.
+  - [x] 1.3 Remove the runtime synthetic loader, query-parameter demo path, prerecorded fallback, and visible Demo action.
     - _Requirements: C10.1_
     - **Verification:** production code has no synthetic loader, demo query parameter, or prerecorded packet fallback path.
 
-- [ ] 2. Build the secure Clearway Desktop shell — 20 minutes
-  - [ ] 2.1 Add Electron main/preload entrypoints and desktop scripts.
+- [x] 2. Build the secure Clearway Desktop shell — 20 minutes
+  - [x] 2.1 Add Electron main/preload entrypoints and desktop scripts.
     - _Requirements: C2.1, C8.1-C8.5_
     - **Verification:** `npm run desktop:dev` loads the local Clearway page with `window.clearwayDesktop` available.
-  - [ ] 2.2 Add native multi-folder approval and in-memory Approved_Root storage.
+  - [x] 2.2 Add native multi-folder approval and in-memory Approved_Root storage.
     - _Requirements: C2.2-C2.4_
     - **Verification:** selected roots appear in `getEnvironment`; an unselected path is rejected.
-  - [ ] 2.3 Emit native activity events and validate sender origin for every IPC handler.
+  - [x] 2.3 Emit native activity events and validate sender origin for every IPC handler.
     - _Requirements: C6.1, C8.3-C8.4_
     - **Verification:** invalid-origin and malformed calls fail without filesystem access.
 
-- [ ] 3. Implement generic local tools — 40 minutes
-  - [ ] 3.1 Implement bounded recursive metadata discovery and arbitrary runtime scoring.
+- [x] 3. Implement generic local tools — 40 minutes
+  - [x] 3.1 Implement bounded recursive metadata discovery and arbitrary runtime scoring.
     - _Requirements: C3.2-C3.3, C4.1-C4.2, C8.5_
     - **Verification:** two unrelated queries rank different real files without code changes.
-  - [ ] 3.2 Add local text/PDF extraction and local image OCR.
+  - [x] 3.2 Add local text/PDF extraction and local image OCR.
     - _Requirements: C4.3-C4.4, C5.1-C5.3_
     - **Verification:** a poorly named image is found from its OCR text and no full file reaches the server.
-  - [ ] 3.3 Add opaque Candidate_File results, bounded preview, and safe open behavior.
+  - [x] 3.3 Add opaque Candidate_File results, bounded preview, and safe open behavior.
     - _Requirements: C4.5-C4.6, C7.1-C7.2_
     - **Verification:** candidate operations work by ID; unknown IDs and traversal attempts fail.
 
-- [ ] 4. Implement the hosted Computer_Agent loop — 30 minutes
-  - [ ] 4.1 Add shared schemas and `POST /api/computer/turn` using Anthropic structured output.
+- [x] 4. Implement the hosted Computer_Agent loop — 30 minutes
+  - [x] 4.1 Add shared schemas and `POST /api/computer/turn` using Anthropic structured output.
     - _Requirements: C3.1-C3.5, C9.2-C9.3_
     - **Verification:** valid requests return one valid state; malformed requests return 400 with no-store headers.
-  - [ ] 4.2 Add environment-first orchestration, real tool-result feedback, and action/time limits.
+  - [x] 4.2 Add environment-first orchestration, real tool-result feedback, and action/time limits.
     - _Requirements: C3.4-C3.5, C9.1, C9.4-C9.5_
     - **Verification:** the loop cannot finish with a candidate that was absent from native results and terminates at its bounds.
 
-- [ ] 5. Integrate computer use into the Clearway workspace — 25 minutes
-  - [ ] 5.1 Add a persistent connected/disconnected control with voice and typed requests.
+- [x] 5. Integrate computer use into the Clearway workspace — 25 minutes
+  - [x] 5.1 Add a persistent connected/disconnected control with voice and typed requests.
     - _Requirements: C2.1, C2.5, C3.1, C11.1-C11.2_
     - **Verification:** the control remains reachable across Application, Documents, and Records and works without a mouse.
-  - [ ] 5.2 Add chronological activity, serialized Deepgram narration, and visible fallback.
+  - [x] 5.2 Add chronological activity, serialized Deepgram narration, and visible fallback.
     - _Requirements: C6.1-C6.6_
     - **Verification:** actual search counts appear in the visible and spoken sequence; forced TTS failure does not stop search.
-  - [ ] 5.3 Add candidate result, preview/open, and in-memory case-association UI.
+  - [x] 5.3 Add candidate result, preview/open, and in-memory case-association UI.
     - _Requirements: C7.1-C7.4_
     - **Verification:** a candidate can be inspected and linked without changing confirmed Applicant_Case facts.
 
 - [ ] 6. Verify the real fresh-input path — 10 minutes
-  - [ ] 6.1 Run focused unit, component, typecheck, build, and regression tests.
+  - [x] 6.1 Run focused unit, component, typecheck, build, and regression tests.
     - _Requirements: C8, C9, C11_
     - **Verification:** tests, `npm run typecheck`, and `npm run build` pass.
   - [ ] 6.2 Run one voice-driven fresh-input search in Clearway Desktop.
