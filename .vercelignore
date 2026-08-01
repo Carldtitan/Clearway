@@ -1,0 +1,6 @@
+Alix-jo.pdf
+tmp/
+output/
+.env
+.env.*
+!.env.example
