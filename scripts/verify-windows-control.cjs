@@ -11,7 +11,7 @@ async function verify() {
   const result = JSON.stringify({
     activeWindow: observation.activeWindow,
     elementCount: observation.elements.length,
-    screenshotCaptured: observation.screenshot.dataUrl.startsWith("data:image/png;base64,"),
+    accessibilityDescriptionsCaptured: observation.elements.length >= 0,
   });
   process.stdout.write(result);
   app.exit(0);

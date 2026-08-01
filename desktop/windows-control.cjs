@@ -3,7 +3,7 @@ const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 const path = require("node:path");
 const { promisify } = require("node:util");
-const { desktopCapturer, screen, shell } = require("electron");
+const { shell } = require("electron");
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_PATH = path.join(__dirname, "windows-control.ps1");
@@ -31,7 +31,6 @@ const CAPABILITIES = new Set([
 
 function createWindowsControl({ emit }) {
   let elementMap = new Map();
-  let lastScreenshot = null;
   let lastObservation = null;
   let stopped = false;
 
@@ -70,11 +69,9 @@ function createWindowsControl({ emit }) {
         args: withWindowTarget({ selector: target.selector }, lastObservation),
       });
     } else if (request.tool === "click") {
-      if (!lastScreenshot) throw new Error("Observe the screen before clicking it.");
-      const point = screenshotPointToDesktop(request.args, lastScreenshot);
       nativeObservation = await runPowerShell("ActAndObserve", {
         tool: request.tool,
-        args: withWindowTarget(point, lastObservation),
+        args: withWindowTarget(request.args, lastObservation),
       });
     } else if (request.tool === "type_text") {
       nativeObservation = await runPowerShell("ActAndObserve", {
@@ -108,8 +105,6 @@ function createWindowsControl({ emit }) {
 
   async function observe(nativeObservation = null) {
     const native = nativeObservation || await runPowerShell("Observe", {});
-    const screenshot = await capturePrimaryDisplay();
-    lastScreenshot = screenshot;
     elementMap = new Map();
     const nativeElements = Array.isArray(native.elements)
       ? native.elements
@@ -136,7 +131,6 @@ function createWindowsControl({ emit }) {
         bounds: normalizeBounds(native.activeWindow?.bounds),
       },
       elements,
-      screenshot,
     };
     return lastObservation;
   }
@@ -203,41 +197,6 @@ async function launchApp(app) {
 async function focusLaunchedWindow(title) {
   await new Promise((resolve) => setTimeout(resolve, 650));
   await runPowerShell("FocusWindow", { title }).catch(() => undefined);
-}
-
-async function capturePrimaryDisplay() {
-  const display = screen.getPrimaryDisplay();
-  const maxWidth = 1_440;
-  const ratio = Math.min(1, maxWidth / display.size.width);
-  const width = Math.max(1, Math.round(display.size.width * ratio));
-  const height = Math.max(1, Math.round(display.size.height * ratio));
-  const sources = await desktopCapturer.getSources({
-    types: ["screen"],
-    thumbnailSize: { width, height },
-    fetchWindowIcons: false,
-  });
-  const source = sources.find((item) => String(item.display_id) === String(display.id)) || sources[0];
-  if (!source || source.thumbnail.isEmpty()) throw new Error("Clearway could not capture the Windows screen.");
-  const image = source.thumbnail.resize({ width, height, quality: "good" });
-  return {
-    dataUrl: `data:image/png;base64,${image.toPNG().toString("base64")}`,
-    width: image.getSize().width,
-    height: image.getSize().height,
-    displayX: display.bounds.x,
-    displayY: display.bounds.y,
-    displayWidth: display.bounds.width,
-    displayHeight: display.bounds.height,
-  };
-}
-
-function screenshotPointToDesktop(point, screenshot) {
-  if (point.x > screenshot.width || point.y > screenshot.height) {
-    throw new Error("That click is outside the latest screenshot.");
-  }
-  return {
-    x: screenshot.displayX + Math.round((point.x / screenshot.width) * screenshot.displayWidth),
-    y: screenshot.displayY + Math.round((point.y / screenshot.height) * screenshot.displayHeight),
-  };
 }
 
 async function runPowerShell(action, payload) {

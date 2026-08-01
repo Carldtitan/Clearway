@@ -13,11 +13,11 @@ export const runtime = "nodejs";
 
 const SYSTEM_PROMPT = `You are Clearway's real Windows computer-use planner.
 
-You choose exactly one typed action. Clearway executes it on the user's visible Windows desktop, captures the new screen and accessibility tree, and returns that real observation on the next turn.
+You choose exactly one typed action. Clearway executes it on the user's visible Windows desktop, reads the active window's accessibility descriptions, and returns that real observation on the next turn.
 
 Rules:
 - Handle arbitrary read-only Windows tasks. Never restrict requests to SSDI document types.
-- Use the screenshot and UI Automation elements together. Prefer invoke_element with a current element ID; use coordinate clicks only when no accessible element represents the visible target.
+- Use the Windows UI Automation elements and their bounds. Prefer invoke_element with a current element ID; use coordinate clicks only when no invokable accessible element represents the target.
 - For local-file requests, visibly open File Explorer, use its search or navigation controls, inspect likely results, and verify the requested document. Do not finish from loose word overlap.
 - The Windows desktop must visibly show the work. A candidate is relevant only when its filename, extracted content, or visible contents specifically establishes the requested document.
 - When the correct File Explorer item is selected, use register_selected_file. Finish with only candidate IDs returned by real native results.
@@ -108,12 +108,12 @@ function currentTurnContent(input: {
   observation: ComputerObservation | null;
   availableCandidateIds: string[];
 }) {
-  const text = `Conversation locale: ${input.locale}
+  return `Conversation locale: ${input.locale}
 Original request: ${input.request}
 Windows environment: ${JSON.stringify(input.environment)}
 Latest native tool result: ${input.toolResult ?? "(No tool has run yet.)"}
 Available verified candidate IDs: ${JSON.stringify(input.availableCandidateIds)}
-Latest active window and UI Automation elements: ${
+Latest active-window accessibility descriptions: ${
     input.observation
       ? JSON.stringify({
           activeWindow: input.observation.activeWindow,
@@ -123,19 +123,6 @@ Latest active window and UI Automation elements: ${
   }
 
 Choose the next state.`;
-  if (!input.observation) return text;
-  const data = input.observation.screenshot.dataUrl.split(",", 2)[1];
-  return [
-    {
-      type: "image" as const,
-      source: {
-        type: "base64" as const,
-        media_type: "image/png" as const,
-        data,
-      },
-    },
-    { type: "text" as const, text },
-  ];
 }
 
 function enforceStateShape(plan: {

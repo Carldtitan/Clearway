@@ -19,12 +19,31 @@ export async function requestComputerTurn(input: {
   signal?: AbortSignal;
 }): Promise<ComputerTurnResponse> {
   const { signal, ...payload } = input;
-  const response = await fetch("/api/computer/turn", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    signal,
-  });
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 25_000);
+  let response: Response;
+  try {
+    response = await fetch("/api/computer/turn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (timedOut) {
+      throw new Error("The agent took longer than 25 seconds to choose its next action. Try again.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    signal?.removeEventListener("abort", abortFromCaller);
+  }
   const body = (await response.json()) as unknown;
   if (!response.ok) {
     const message =

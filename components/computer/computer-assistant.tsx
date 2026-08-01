@@ -29,8 +29,13 @@ import type {
 } from "@/lib/computer/schema";
 import { cn } from "@/lib/utils";
 
-const MAX_ACTIONS = 20;
-const MAX_RUN_MS = 180_000;
+const MAX_ACTIONS = 12;
+const MAX_RUN_MS = 120_000;
+
+interface AgentStatus {
+  message: string;
+  step: number;
+}
 
 export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
   const voice = useVoiceTurn(locale);
@@ -44,6 +49,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [observation, setObservation] = useState<ComputerObservation | null>(null);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const speechQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mountedRef = useRef(true);
   const runRef = useRef(0);
@@ -141,6 +147,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     setCandidates([]);
     setPreviews({});
     setObservation(null);
+    setAgentStatus({ message: "Starting the Windows task.", step: 1 });
     addAssistantActivity("started", `You asked: “${userRequest}”`, false);
     const startedAt = Date.now();
     const history: Array<{ role: "assistant" | "user"; content: string }> = [
@@ -153,8 +160,12 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     try {
       for (let step = 0; step < MAX_ACTIONS; step += 1) {
         if (Date.now() - startedAt >= MAX_RUN_MS) {
-          throw new Error("The Windows task reached its three-minute safety limit.");
+          throw new Error("The Windows task reached its two-minute safety limit. Try a more specific request.");
         }
+        setAgentStatus({
+          message: "Choosing the next action from Windows accessibility descriptions.",
+          step: step + 1,
+        });
         const plan = await requestComputerTurn({
           request: userRequest,
           locale,
@@ -187,17 +198,22 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
         }
 
         addAssistantActivity("progress", plan.narration, true);
+        setAgentStatus({ message: plan.narration, step: step + 1 });
         const result = await desktop.executeTool(plan.action);
         if (runId !== runRef.current) return;
         collectCandidates(result, discovered);
         if (result.observation) {
           currentObservation = result.observation;
           setObservation(result.observation);
+          setAgentStatus({
+            message: `Reading accessible controls in ${result.observation.activeWindow.title || "the active window"}.`,
+            step: step + 1,
+          });
         }
         toolResult = serializeToolResult(result);
         history.push({ role: "user", content: `Native result: ${toolResult}` });
       }
-      throw new Error("Clearway stopped after twenty Windows actions.");
+      throw new Error("Clearway stopped after twelve Windows actions. Try a more specific request.");
     } catch (runError) {
       if (runId !== runRef.current) return;
       const message = errorMessage(runError, "Clearway could not complete that Windows task.");
@@ -208,6 +224,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
       if (runId === runRef.current) {
         plannerAbortRef.current = null;
         setBusy(false);
+        setAgentStatus(null);
       }
     }
   }
@@ -218,6 +235,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     plannerAbortRef.current = null;
     await window.clearwayDesktop?.stopComputer().catch(() => undefined);
     setBusy(false);
+    setAgentStatus(null);
     addAssistantActivity("failed", "You stopped the Windows task.", true);
   }
 
@@ -282,7 +300,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
                 Windows assistant
               </p>
               <p className="mt-1 text-sm text-white/80">
-                {connected ? "Screen and accessibility control ready" : "Available in Clearway Desktop"}
+                {connected ? "Windows accessibility control ready" : "Available in Clearway Desktop"}
               </p>
             </div>
             <button
@@ -353,24 +371,34 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
                   ) : null}
                 </form>
 
-                {busy ? (
-                  <Button className="mt-3 w-full" onClick={() => void stopComputer()} variant="secondary">
-                    <Square aria-hidden="true" className="size-3.5 fill-current" />
-                    Stop Windows task
-                  </Button>
+                {busy && agentStatus ? (
+                  <div className="mt-4 rounded-[var(--radius-control)] bg-accent-soft p-3.5" role="status">
+                    <div className="flex items-start gap-3">
+                      <LoaderCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 animate-spin text-accent" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-wide text-accent">
+                          Step {agentStatus.step} of {MAX_ACTIONS}
+                        </p>
+                        <p className="mt-1 text-sm leading-relaxed text-foreground">
+                          {agentStatus.message}
+                        </p>
+                      </div>
+                    </div>
+                    <Button className="mt-3 w-full" onClick={() => void stopComputer()} variant="secondary">
+                      <Square aria-hidden="true" className="size-3.5 fill-current" />
+                      Stop Windows task
+                    </Button>
+                  </div>
                 ) : null}
 
                 {observation ? (
-                  <div className="mt-5 overflow-hidden rounded-[var(--radius-control)] border border-border bg-surface-subtle">
-                    {/* A live local screenshot returned by the Clearway Desktop bridge. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      alt={`Latest Windows view: ${observation.activeWindow.title}`}
-                      className="max-h-52 w-full object-contain"
-                      src={observation.screenshot.dataUrl}
-                    />
-                    <p className="truncate px-3 py-2 text-xs font-bold text-muted" title={observation.activeWindow.title}>
-                      Live Windows view · {observation.activeWindow.title || "Desktop"}
+                  <div className="mt-4 rounded-[var(--radius-control)] border border-border bg-surface-subtle p-3.5">
+                    <p className="text-xs font-bold text-muted">Accessibility view</p>
+                    <p className="mt-1 truncate text-sm font-bold" title={observation.activeWindow.title}>
+                      {observation.activeWindow.title || "Windows desktop"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {observation.elements.length} accessible controls available to the agent
                     </p>
                   </div>
                 ) : null}
@@ -438,7 +466,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
                   </p>
                 ) : null}
                 <p className="mt-4 text-xs leading-relaxed text-muted">
-                  While a task runs, Clearway sends the visible screenshot and accessibility labels to its hosted planner. It will not type passwords or confirm destructive actions.
+                  Clearway sends active-window accessibility descriptions to its hosted agent. It will not type passwords or confirm destructive actions.
                 </p>
               </>
             )}

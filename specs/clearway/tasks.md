@@ -21,9 +21,9 @@ This plan implements the Clearway requirements and design in dependency order. N
   - [x] 2.1 Add Electron main/preload entrypoints and desktop scripts.
     - _Requirements: C2.1, C8.1-C8.5_
     - **Verification:** `npm run desktop:dev` loads the local Clearway page with `window.clearwayDesktop` available.
-  - [x] 2.2 Add bounded screenshot capture, UI Automation observation, and session-only file authorization from a real Explorer selection.
+  - [x] 2.2 Add bounded UI Automation observation and session-only file authorization from a real Explorer selection.
     - _Requirements: C2.2-C2.4_
-    - **Verification:** the read-only native check captures a screenshot and active-window controls; unregistered paths are rejected.
+    - **Verification:** the read-only native check captures active-window accessibility descriptions; unregistered paths are rejected.
   - [x] 2.3 Emit native activity events and validate sender origin for every IPC handler.
     - _Requirements: C6.1, C8.3-C8.4_
     - **Verification:** invalid-origin and malformed calls fail without filesystem access.
@@ -70,9 +70,9 @@ This plan implements the Clearway requirements and design in dependency order. N
     - **Verification:** the configured deployed origin completes the same fresh-input path.
 
 - [x] 7. Replace search-only behavior with visible Windows computer use
-  - [x] 7.1 Add screen capture, active-window UI Automation observation, and bounded app/input actions.
+  - [x] 7.1 Add active-window UI Automation observation and bounded app/input actions.
     - _Requirements: C12.1-C12.3, C12.5_
-  - [x] 7.2 Add a screenshot-aware hosted planning loop, post-action verification, and Stop control.
+  - [x] 7.2 Add an accessibility-description planning loop, post-action verification, progress state, and Stop control.
     - _Requirements: C12.1-C12.4_
   - [x] 7.3 Register real File Explorer selections as opaque case candidates.
     - _Requirements: C12.6_

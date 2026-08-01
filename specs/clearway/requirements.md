@@ -45,7 +45,7 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 #### Acceptance Criteria
 
 1. WHEN the Vercel app runs inside Clearway_Desktop, THE interface SHALL show that local computer access is connected.
-2. BEFORE a task starts, THE interface SHALL disclose that the current screenshot and accessibility labels are sent to the hosted planner.
+2. BEFORE a task starts, THE interface SHALL disclose that active-window accessibility descriptions are sent to the hosted planner.
 3. THE native executor SHALL expose a local file only after the user can see it selected in File Explorer.
 4. THE file authorization and candidate IDs SHALL expire when Clearway_Desktop exits.
 5. WHEN the app runs in a normal browser, THE interface SHALL explain that Clearway_Desktop is required for Windows control without pretending that control occurred.
@@ -69,7 +69,7 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 #### Acceptance Criteria
 
 1. THE agent SHALL use visible File Explorer navigation and search controls rather than a hidden keyword index.
-2. THE agent SHALL reason over the current screenshot and accessibility controls after each action.
+2. THE agent SHALL reason over the current active-window accessibility descriptions after each action.
 3. AFTER a real Explorer selection is registered, THE executor SHALL support local extraction from text files, text PDFs, and common image formats.
 4. WHEN a selected image needs inspection, THE executor SHALL be able to run local English OCR and use the extracted text as evidence.
 5. THE executor SHALL return Candidate_File records with actual names, display paths, timestamps, verification evidence, and opaque IDs.
@@ -82,8 +82,8 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 #### Acceptance Criteria
 
 1. THE desktop executor SHALL perform file parsing, OCR, and preview generation locally after visible selection.
-2. THE web agent MAY receive metadata, bounded text excerpts, the active-window accessibility tree, and a bounded screenshot while a visible task is running.
-3. THE web agent SHALL NOT receive complete local files; the interface SHALL disclose that current-screen images are sent to the hosted planner during computer use.
+2. THE web agent MAY receive metadata, bounded text excerpts, and the active-window accessibility tree while a visible task is running.
+3. THE web agent SHALL NOT receive complete local files; the interface SHALL disclose that accessibility descriptions are sent to the hosted planner during computer use.
 4. THE server SHALL reject excerpts above the configured length and SHALL use `Cache-Control: no-store`.
 5. THE application SHALL NOT persist Candidate_File data, excerpts, or computer-agent history after the session.
 
@@ -163,9 +163,9 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 
 #### Acceptance Criteria
 
-1. THE desktop executor SHALL capture the real Windows screen and active-window UI Automation controls after every GUI-changing action.
+1. THE desktop executor SHALL read the active-window UI Automation controls after every GUI-changing action.
 2. THE Computer_Agent SHALL be able to open supported apps, focus windows, invoke accessible controls, click visible coordinates, type, press bounded key chords, scroll, and wait.
-3. THE executor SHALL prefer UI Automation controls and SHALL use screenshot coordinates only when an accessible control is unavailable.
+3. THE executor SHALL prefer UI Automation invocation and SHALL use control bounds only when an accessible element cannot be invoked directly.
 4. THE interface SHALL expose the latest Windows view, current action, and an immediate Stop control.
 5. THE executor SHALL block terminals, credential surfaces, destructive controls, submission, purchase, upload, and system-security changes.
 6. A local document SHALL become a Candidate_File only after a real selected File Explorer item is registered.

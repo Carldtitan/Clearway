@@ -26,7 +26,7 @@ The responsive Next.js application is hosted on Vercel. Clearway Desktop is an E
 
 - The current packet contains SSA-16, SSA-3368, SSA-3369, SSA-827, continuation sheets, and an evidence index.
 - An explicitly labeled Elena Rivera sample case may prefill the SSDI answers for a fast stage walkthrough; it never supplies computer-search requests or results.
-- Local computer use combines screenshots and Windows UI Automation so the person sees Explorer and desktop-app actions happen on screen.
+- Local computer use uses Windows accessibility descriptions so the person sees Explorer and desktop-app actions happen on screen.
 - Clearway may open supported desktop apps, focus windows, invoke accessible controls, click, type, scroll, and register a real File Explorer selection; destructive, credential, submission, and system-security actions remain blocked.
 - Clearway Desktop can create a new case folder containing the five core generated documents, linked supporting files, and a missing-document checklist.
 - Computer requests are arbitrary natural language within the available tools; document names and successful results are never predetermined.

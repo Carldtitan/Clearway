@@ -179,15 +179,6 @@ export const computerObservationSchema = z.object({
     enabled: z.boolean(),
     bounds: windowBoundsSchema,
   })).max(300),
-  screenshot: z.object({
-    dataUrl: z.string().startsWith("data:image/png;base64,").max(5_000_000),
-    width: z.number().int().positive().max(4_000),
-    height: z.number().int().positive().max(4_000),
-    displayX: z.number().int(),
-    displayY: z.number().int(),
-    displayWidth: z.number().int().positive().max(10_000),
-    displayHeight: z.number().int().positive().max(10_000),
-  }),
 });
 
 export const computerTurnResponseSchema = z.object({

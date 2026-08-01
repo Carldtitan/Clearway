@@ -2,7 +2,7 @@
 
 ## Overview
 
-Clearway keeps the existing Next.js/Vercel application as the visible product and uses Electron as its Windows execution boundary. The web application owns conversation, SSDI case state, agent orchestration, results, and narration. Electron owns screen capture, Windows UI Automation, bounded input actions, optional folder consent, verified evidence, and case-folder export. Anthropic chooses typed actions from arbitrary requests; it never receives unrestricted shell access.
+Clearway keeps the existing Next.js/Vercel application as the visible product and uses Electron as its Windows execution boundary. The web application owns conversation, SSDI case state, agent orchestration, results, and narration. Electron owns Windows UI Automation, bounded input actions, verified evidence, and case-folder export. Anthropic chooses typed actions from active-window accessibility descriptions and arbitrary requests; it never receives unrestricted shell access.
 
 This design implements Requirements C1-C13. Browser automation, credential entry, destructive actions, uploads, and SSA submission remain excluded.
 
@@ -71,7 +71,7 @@ The loop continues until the planner returns `finish`, `clarify`, or `error`, or
 ### 3. Request planning (C3, C9)
 
 1. The existing voice hook transcribes the request, or the user types it.
-2. The renderer sends the request, locale, sanitized environment, recent turns, prior tool result, latest screenshot, and active-window UI Automation elements to `/api/computer/turn`.
+2. The renderer sends the request, locale, sanitized environment, recent turns, prior tool result, and active-window UI Automation descriptions to `/api/computer/turn`.
 3. Anthropic returns one schema-validated `Computer_Turn_Response`.
 4. The renderer either invokes one tool, presents a grounded result, asks a necessary clarification, or reports failure.
 
@@ -213,7 +213,7 @@ type ComputerTurnResponse =
 
 ### Visible Windows agent (C12)
 
-Clearway Desktop owns a native Windows controller. Each turn combines a bounded primary-display screenshot with the active window's UI Automation controls. The hosted planner returns one typed action; Electron executes it through a fixed PowerShell/.NET bridge using UI Automation and SendInput, waits for the UI to settle, and captures the next real observation. Direct file indexing remains an optional accelerator and never proves relevance by itself.
+Clearway Desktop owns a native Windows controller. Each turn reads the active window's UI Automation controls. The hosted planner returns one typed action; Electron executes it through a fixed PowerShell/.NET bridge using UI Automation and SendInput, waits for the UI to settle, and reads the next real accessibility observation. Hidden file indexing is not part of the planner path.
 
 File Explorer selections cross the trust boundary through `register_selected_file`. The native layer reads the actual selected path, creates an opaque Candidate_File, and only then allows the web application to present or link it.
 
