@@ -12,7 +12,7 @@ Clearway serves people with disabilities preparing an SSDI application, includin
 
 ## Product Purpose
 
-Clearway conducts a guided voice conversation, turns confirmed answers into a consistent SSDI packet, identifies supporting evidence, and can use an approved portion of the applicant's Windows computer to find real local documents. Success means the applicant can move from a spoken request to an inspectable real result without operating complex forms or folders manually.
+Clearway conducts a guided voice conversation, turns confirmed answers into a consistent SSDI packet, identifies supporting evidence, and visibly operates Windows applications to find and verify real local documents. Success means the applicant ends with one case folder containing five generated documents, found supporting evidence, and an honest list of anything still missing.
 
 ## Positioning
 
@@ -26,9 +26,11 @@ The responsive Next.js application is hosted on Vercel. Clearway Desktop is an E
 
 - The current packet contains SSA-16, SSA-3368, SSA-3369, SSA-827, continuation sheets, and an evidence index.
 - An explicitly labeled Elena Rivera sample case may prefill the SSDI answers for a fast stage walkthrough; it never supplies computer-search requests or results.
-- Local computer use is limited to read-only search, inspection, preview, and opening of files inside folders the user approves for the current session.
+- Local computer use combines screenshots and Windows UI Automation so the person sees Explorer and desktop-app actions happen on screen.
+- Clearway may open supported desktop apps, focus windows, invoke accessible controls, click, type, scroll, and register a real File Explorer selection; destructive, credential, submission, and system-security actions remain blocked.
+- Clearway Desktop can create a new case folder containing the five core generated documents, linked supporting files, and a missing-document checklist.
 - Computer requests are arbitrary natural language within the available tools; document names and successful results are never predetermined.
-- Browser automation, general Windows UI Automation, uploads, deletion, moving files, and SSA submission are later work.
+- Browser automation, uploads, deletion, moving existing files, credential entry, and SSA submission are later work.
 - Applicant and file data are kept in memory; complete local files are not uploaded by the computer-use MVOP.
 
 ## Brand Commitments

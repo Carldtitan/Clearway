@@ -1,11 +1,12 @@
 "use client";
 
+import type { SupportedLocale } from "@/lib/case/types";
 import {
   computerTurnResponseSchema,
   type ComputerEnvironment,
+  type ComputerObservation,
   type ComputerTurnResponse,
 } from "@/lib/computer/schema";
-import type { SupportedLocale } from "@/lib/case/types";
 
 export async function requestComputerTurn(input: {
   request: string;
@@ -13,11 +14,16 @@ export async function requestComputerTurn(input: {
   environment: ComputerEnvironment;
   history: Array<{ role: "assistant" | "user"; content: string }>;
   toolResult: string | null;
+  observation: ComputerObservation | null;
+  availableCandidateIds: string[];
+  signal?: AbortSignal;
 }): Promise<ComputerTurnResponse> {
+  const { signal, ...payload } = input;
   const response = await fetch("/api/computer/turn", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
+    signal,
   });
   const body = (await response.json()) as unknown;
   if (!response.ok) {
@@ -36,9 +42,9 @@ export async function requestComputerTurn(input: {
 
 export function serializeToolResult(value: unknown) {
   const serialized = JSON.stringify(value, (key, nested) =>
-    key === "previewDataUrl" ? undefined : nested,
+    key === "previewDataUrl" || key === "observation" ? undefined : nested,
   );
-  return serialized.length <= 24_000
+  return serialized.length <= 40_000
     ? serialized
-    : `${serialized.slice(0, 23_960)}…[truncated]`;
+    : `${serialized.slice(0, 39_960)}…[truncated]`;
 }

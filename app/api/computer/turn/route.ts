@@ -5,28 +5,31 @@ import { NextResponse } from "next/server";
 import {
   computerTurnRequestSchema,
   computerTurnResponseSchema,
+  type ComputerObservation,
 } from "@/lib/computer/schema";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const SYSTEM_PROMPT = `You are Clearway's computer-action planner for a Windows accessibility assistant.
+const SYSTEM_PROMPT = `You are Clearway's real Windows computer-use planner.
 
-You do not control Windows directly. You choose exactly one typed read-only tool action, then receive the real result on the next turn.
+You choose exactly one typed action. Clearway executes it on the user's visible Windows desktop, captures the new screen and accessibility tree, and returns that real observation on the next turn.
 
 Rules:
-- Handle arbitrary local file requests. Never restrict requests to SSDI document types.
-- Use only capabilities and approved roots listed in the environment.
-- Never invent a filename, path, candidate ID, file count, excerpt, action, or success.
-- On a new find/search request, use search_files. Create helpful runtime terms and extension hints from the user's meaning; these are search hints, not predetermined answers.
-- search_files already considers filename, path, metadata, PDF/text contents, and bounded local OCR. Prefer finishing from its evidence when the results answer the request.
-- Use candidate actions only with an exact candidate ID from the latest real tool result.
-- If no result is strong, you may retry search_files once with meaningfully different terms. Otherwise finish honestly with no candidates or ask one short clarification.
+- Handle arbitrary read-only Windows tasks. Never restrict requests to SSDI document types.
+- Use the screenshot and UI Automation elements together. Prefer invoke_element with a current element ID; use coordinate clicks only when no accessible element represents the visible target.
+- For local-file requests, visibly open File Explorer, use its search or navigation controls, inspect likely results, and verify the requested document. Do not finish from loose word overlap.
+- The Windows desktop must visibly show the work. A candidate is relevant only when its filename, extracted content, or visible contents specifically establishes the requested document.
+- When the correct File Explorer item is selected, use register_selected_file. Finish with only candidate IDs returned by real native results.
+- After every UI-changing action, reason from the new observation. Never assume an action worked.
+- Never invent a window, control, filename, path, candidate ID, content, action, or success.
+- Do not open terminals, command prompts, developer consoles, Registry Editor, Task Manager, credential tools, or UAC prompts.
+- Do not enter passwords, reveal secrets, delete, move, rename, purchase, upload, sign, send, submit, or change system or security settings.
+- If a task requires a sensitive or destructive action, stop and explain what remains for the user.
 - state act requires one non-null action and no candidateIds.
 - state finish, clarify, and error require a null action.
-- candidateIds in finish must be exact IDs from the latest tool result. Use an empty list when no match was found.
+- candidateIds in finish must be exact IDs from availableCandidateIds. Use an empty list when no verified file was found.
 - Narration must be short, plain, and in the requested locale. Do not narrate an action as complete before its result exists.
-- Do not offer to move, delete, upload, sign, submit, browse the web, run commands, or control another application.
 - Return only schema-conforming data.`;
 
 export async function POST(request: Request) {
@@ -52,23 +55,25 @@ export async function POST(request: Request) {
     const input = parsed.data;
     const anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-      timeout: 20_000,
+      timeout: 30_000,
       maxRetries: 1,
     });
     const response = await anthropic.messages.parse({
       model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
-      max_tokens: 1_200,
+      max_tokens: 1_400,
       system: SYSTEM_PROMPT,
       messages: [
         ...input.history,
         {
           role: "user",
-          content: `Conversation locale: ${input.locale}
-Original request: ${input.request}
-Windows environment: ${JSON.stringify(input.environment)}
-Latest native tool result: ${input.toolResult ?? "(No tool has run yet.)"}
-
-Choose the next state.`,
+          content: currentTurnContent({
+            locale: input.locale,
+            request: input.request,
+            environment: input.environment,
+            toolResult: input.toolResult,
+            observation: input.observation,
+            availableCandidateIds: input.availableCandidateIds,
+          }),
         },
       ],
       output_config: {
@@ -78,7 +83,7 @@ Choose the next state.`,
     const plan = response.parsed_output;
     if (!plan) throw new Error("Structured computer plan was empty");
     enforceStateShape(plan);
-    enforceCandidateProvenance(plan, input.toolResult);
+    enforceCandidateProvenance(plan, input.availableCandidateIds);
     return noStore(NextResponse.json(plan));
   } catch (error) {
     const status = error instanceof Anthropic.APIError ? error.status : undefined;
@@ -88,11 +93,49 @@ Choose the next state.`,
     });
     return noStore(
       NextResponse.json(
-        { error: "Clearway could not plan the next computer action. Try again." },
+        { error: "Clearway could not plan the next Windows action. Try again." },
         { status: 502 },
       ),
     );
   }
+}
+
+function currentTurnContent(input: {
+  locale: string;
+  request: string;
+  environment: unknown;
+  toolResult: string | null;
+  observation: ComputerObservation | null;
+  availableCandidateIds: string[];
+}) {
+  const text = `Conversation locale: ${input.locale}
+Original request: ${input.request}
+Windows environment: ${JSON.stringify(input.environment)}
+Latest native tool result: ${input.toolResult ?? "(No tool has run yet.)"}
+Available verified candidate IDs: ${JSON.stringify(input.availableCandidateIds)}
+Latest active window and UI Automation elements: ${
+    input.observation
+      ? JSON.stringify({
+          activeWindow: input.observation.activeWindow,
+          elements: input.observation.elements,
+        })
+      : "(No Windows observation yet.)"
+  }
+
+Choose the next state.`;
+  if (!input.observation) return text;
+  const data = input.observation.screenshot.dataUrl.split(",", 2)[1];
+  return [
+    {
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: "image/png" as const,
+        data,
+      },
+    },
+    { type: "text" as const, text },
+  ];
 }
 
 function enforceStateShape(plan: {
@@ -113,45 +156,13 @@ function enforceStateShape(plan: {
 
 function enforceCandidateProvenance(
   plan: { state: string; candidateIds: string[] },
-  toolResult: string | null,
+  availableCandidateIds: string[],
 ) {
   if (plan.state !== "finish" || !plan.candidateIds.length) return;
-  if (!toolResult) throw new Error("Finished before a native tool result");
-  let result: unknown;
-  try {
-    result = JSON.parse(toolResult);
-  } catch {
-    throw new Error("Native tool result was not valid JSON");
-  }
-  const available = collectCandidateIds(result);
+  const available = new Set(availableCandidateIds);
   if (plan.candidateIds.some((id) => !available.has(id))) {
     throw new Error("Plan referenced an undiscovered candidate");
   }
-}
-
-function collectCandidateIds(value: unknown) {
-  const ids = new Set<string>();
-  if (!value || typeof value !== "object") return ids;
-  const record = value as Record<string, unknown>;
-  if (Array.isArray(record.candidates)) {
-    for (const candidate of record.candidates) {
-      if (
-        candidate &&
-        typeof candidate === "object" &&
-        typeof (candidate as Record<string, unknown>).id === "string"
-      ) {
-        ids.add((candidate as Record<string, string>).id);
-      }
-    }
-  }
-  if (
-    record.candidate &&
-    typeof record.candidate === "object" &&
-    typeof (record.candidate as Record<string, unknown>).id === "string"
-  ) {
-    ids.add((record.candidate as Record<string, string>).id);
-  }
-  return ids;
 }
 
 async function safeJson(request: Request): Promise<unknown> {

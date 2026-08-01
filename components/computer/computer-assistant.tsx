@@ -5,12 +5,12 @@ import {
   ChevronDown,
   ExternalLink,
   FileSearch,
-  FolderOpen,
   Image as ImageIcon,
   LoaderCircle,
   Mic,
   MonitorCheck,
   Search,
+  Square,
   Unplug,
   X,
 } from "lucide-react";
@@ -19,20 +19,18 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useVoiceTurn } from "@/components/voice/use-voice-turn";
 import type { SupportedLocale } from "@/lib/case/types";
-import {
-  requestComputerTurn,
-  serializeToolResult,
-} from "@/lib/computer/client";
+import { requestComputerTurn, serializeToolResult } from "@/lib/computer/client";
 import type {
   ActivityEvent,
   CandidateFile,
   ComputerEnvironment,
+  ComputerObservation,
   ComputerToolResult,
 } from "@/lib/computer/schema";
 import { cn } from "@/lib/utils";
 
-const MAX_ACTIONS = 8;
-const MAX_RUN_MS = 60_000;
+const MAX_ACTIONS = 20;
+const MAX_RUN_MS = 180_000;
 
 export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
   const voice = useVoiceTurn(locale);
@@ -45,18 +43,26 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
   const [request, setRequest] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [observation, setObservation] = useState<ComputerObservation | null>(null);
   const speechQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mountedRef = useRef(true);
+  const runRef = useRef(0);
+  const plannerAbortRef = useRef<AbortController | null>(null);
 
   const connected = Boolean(environment);
-  const roots = environment?.roots ?? [];
 
   useEffect(() => {
     mountedRef.current = true;
     if (!window.clearwayDesktop) return;
-    void window.clearwayDesktop
-      .getEnvironment()
-      .then((value) => mountedRef.current && setEnvironment(value))
+    void Promise.all([
+      window.clearwayDesktop.getEnvironment(),
+      window.clearwayDesktop.listLinkedCandidates(),
+    ])
+      .then(([value, linkedFiles]) => {
+        if (!mountedRef.current) return;
+        setEnvironment(value);
+        setLinked(new Set(linkedFiles.map((candidate) => candidate.id)));
+      })
       .catch(() => mountedRef.current && setEnvironment(null));
     const unsubscribe = window.clearwayDesktop.onActivity((event) => {
       if (!mountedRef.current) return;
@@ -65,9 +71,11 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     });
     return () => {
       mountedRef.current = false;
+      runRef.current += 1;
+      plannerAbortRef.current?.abort();
       unsubscribe();
     };
-    // Native subscription is established once for this mounted control.
+    // The native subscription is established once for this mounted control.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -94,17 +102,6 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     if (speak) queueSpeech(message);
   }
 
-  async function chooseFolders() {
-    if (!window.clearwayDesktop) return;
-    setError(null);
-    try {
-      await window.clearwayDesktop.chooseRoots();
-      setEnvironment(await window.clearwayDesktop.getEnvironment());
-    } catch (selectionError) {
-      setError(errorMessage(selectionError, "Clearway could not approve those folders."));
-    }
-  }
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     await runRequest(request);
@@ -114,6 +111,11 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     setError(null);
     try {
       await voice.activate();
+      addAssistantActivity(
+        "started",
+        "Clearway will ask the question, then say when it is listening.",
+        false,
+      );
       const transcript = await voice.ask(voiceRequestPrompt(locale));
       setRequest(transcript);
       await runRequest(transcript);
@@ -126,31 +128,32 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     const desktop = window.clearwayDesktop;
     const userRequest = rawRequest.trim();
     if (!desktop || !environment) {
-      setError("Open this page in Clearway Desktop to search local files.");
-      return;
-    }
-    if (!roots.length) {
-      setError("Choose the folders Clearway may search first.");
+      setError("Open this page in Clearway Desktop to control Windows.");
       return;
     }
     if (!userRequest || busy) return;
 
+    const runId = ++runRef.current;
+    const plannerAbort = new AbortController();
+    plannerAbortRef.current = plannerAbort;
     setBusy(true);
     setError(null);
     setCandidates([]);
     setPreviews({});
+    setObservation(null);
     addAssistantActivity("started", `You asked: “${userRequest}”`, false);
     const startedAt = Date.now();
     const history: Array<{ role: "assistant" | "user"; content: string }> = [
       { role: "user", content: userRequest },
     ];
     let toolResult: string | null = null;
+    let currentObservation: ComputerObservation | null = null;
     const discovered = new Map<string, CandidateFile>();
 
     try {
       for (let step = 0; step < MAX_ACTIONS; step += 1) {
         if (Date.now() - startedAt >= MAX_RUN_MS) {
-          throw new Error("The search reached its one-minute safety limit.");
+          throw new Error("The Windows task reached its three-minute safety limit.");
         }
         const plan = await requestComputerTurn({
           request: userRequest,
@@ -158,7 +161,11 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
           environment,
           history: history.slice(-12),
           toolResult,
+          observation: currentObservation,
+          availableCandidateIds: [...discovered.keys()],
+          signal: plannerAbort.signal,
         });
+        if (runId !== runRef.current) return;
         history.push({
           role: "assistant",
           content: `${plan.narration}\nState: ${plan.state}${plan.action ? `\nAction: ${JSON.stringify(plan.action)}` : ""}`,
@@ -169,7 +176,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
             ? plan.candidateIds
                 .map((id) => discovered.get(id))
                 .filter((candidate): candidate is CandidateFile => Boolean(candidate))
-            : [...discovered.values()];
+            : [];
           setCandidates(selected);
           addAssistantActivity(
             plan.state === "error" ? "failed" : "completed",
@@ -179,20 +186,39 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
           return;
         }
 
+        addAssistantActivity("progress", plan.narration, true);
         const result = await desktop.executeTool(plan.action);
+        if (runId !== runRef.current) return;
         collectCandidates(result, discovered);
+        if (result.observation) {
+          currentObservation = result.observation;
+          setObservation(result.observation);
+        }
         toolResult = serializeToolResult(result);
         history.push({ role: "user", content: `Native result: ${toolResult}` });
       }
-      throw new Error("Clearway stopped after eight computer actions.");
+      throw new Error("Clearway stopped after twenty Windows actions.");
     } catch (runError) {
-      const message = errorMessage(runError, "Clearway could not complete that computer request.");
+      if (runId !== runRef.current) return;
+      const message = errorMessage(runError, "Clearway could not complete that Windows task.");
       setError(message);
       addAssistantActivity("failed", message, true);
       setCandidates([...discovered.values()]);
     } finally {
-      setBusy(false);
+      if (runId === runRef.current) {
+        plannerAbortRef.current = null;
+        setBusy(false);
+      }
     }
+  }
+
+  async function stopComputer() {
+    runRef.current += 1;
+    plannerAbortRef.current?.abort();
+    plannerAbortRef.current = null;
+    await window.clearwayDesktop?.stopComputer().catch(() => undefined);
+    setBusy(false);
+    addAssistantActivity("failed", "You stopped the Windows task.", true);
   }
 
   async function preview(candidate: CandidateFile) {
@@ -204,10 +230,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
         args: { candidateId: candidate.id },
       });
       if (typeof result.previewDataUrl === "string") {
-        setPreviews((current) => ({
-          ...current,
-          [candidate.id]: result.previewDataUrl as string,
-        }));
+        setPreviews((current) => ({ ...current, [candidate.id]: result.previewDataUrl as string }));
       } else if (result.message) {
         setError(result.message);
       }
@@ -229,13 +252,20 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
     }
   }
 
-  function toggleLinked(candidateId: string) {
-    setLinked((current) => {
-      const next = new Set(current);
-      if (next.has(candidateId)) next.delete(candidateId);
-      else next.add(candidateId);
-      return next;
-    });
+  async function toggleLinked(candidateId: string) {
+    if (!window.clearwayDesktop) return;
+    const shouldLink = !linked.has(candidateId);
+    try {
+      await window.clearwayDesktop.linkCandidate({ candidateId, linked: shouldLink });
+      setLinked((current) => {
+        const next = new Set(current);
+        if (shouldLink) next.add(candidateId);
+        else next.delete(candidateId);
+        return next;
+      });
+    } catch (linkError) {
+      setError(errorMessage(linkError, "Clearway could not add that file to the case."));
+    }
   }
 
   return (
@@ -248,23 +278,15 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
           <header className="flex items-start justify-between gap-4 bg-accent px-5 py-4 text-white">
             <div>
               <p className="flex items-center gap-2 font-bold">
-                {connected ? (
-                  <MonitorCheck aria-hidden="true" className="size-5" />
-                ) : (
-                  <Unplug aria-hidden="true" className="size-5" />
-                )}
-                Computer assistant
+                {connected ? <MonitorCheck aria-hidden="true" className="size-5" /> : <Unplug aria-hidden="true" className="size-5" />}
+                Windows assistant
               </p>
               <p className="mt-1 text-sm text-white/80">
-                {connected
-                  ? roots.length
-                    ? `${roots.length} approved ${roots.length === 1 ? "folder" : "folders"}`
-                    : "Connected · choose folders to begin"
-                  : "Available in Clearway Desktop"}
+                {connected ? "Screen and accessibility control ready" : "Available in Clearway Desktop"}
               </p>
             </div>
             <button
-              aria-label="Close computer assistant"
+              aria-label="Close Windows assistant"
               className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-control)] text-white/80 hover:bg-white/10 hover:text-white"
               onClick={() => setOpen(false)}
               type="button"
@@ -276,63 +298,82 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
           <div className="overflow-y-auto p-4 sm:p-5">
             {!connected ? (
               <p className="rounded-[var(--radius-control)] bg-accent-soft p-4 text-sm leading-relaxed text-accent">
-                The normal web app cannot inspect your computer. Open the same
-                Clearway site inside Clearway Desktop for local, permission-based
-                search.
+                Open this site inside Clearway Desktop to control Windows apps.
               </p>
             ) : (
               <>
-                <Button
-                  className="w-full justify-start"
-                  onClick={() => void chooseFolders()}
-                  variant="secondary"
-                >
-                  <FolderOpen aria-hidden="true" className="size-4" />
-                  {roots.length ? "Change approved folders" : "Choose folders to search"}
-                </Button>
-                {roots.length ? (
-                  <p className="mt-2 truncate text-xs text-muted" title={roots.map((root) => root.displayPath).join(" · ")}>
-                    {roots.map((root) => root.name).join(" · ")}
-                  </p>
-                ) : null}
-
-                <form className="mt-5" onSubmit={submit}>
+                <form onSubmit={submit}>
                   <label className="text-sm font-bold" htmlFor="computer-request">
-                    What should Clearway find?
+                    What should Clearway do on Windows?
                   </label>
                   <div className="mt-2 flex items-stretch gap-2">
                     <input
                       className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-border bg-background px-3.5 text-base text-foreground placeholder:text-muted/75 focus:border-focus"
-                      disabled={busy || !roots.length}
+                      disabled={busy}
                       id="computer-request"
                       onChange={(event) => setRequest(event.currentTarget.value)}
-                      placeholder="Find my driver's license"
+                      placeholder="Open Explorer and find my passport"
                       value={request}
                     />
                     <Button
-                      aria-label="Speak computer request"
-                      disabled={busy || !roots.length}
-                      onClick={() => void captureVoiceRequest()}
+                      aria-label={voice.state === "listening" ? "Finish speaking" : "Speak Windows request"}
+                      disabled={busy || voice.state === "speaking" || voice.state === "processing"}
+                      onClick={() => {
+                        if (voice.state === "listening") voice.finishAnswer();
+                        else void captureVoiceRequest();
+                      }}
                       size="icon"
                       type="button"
                       variant="secondary"
                     >
-                      <Mic aria-hidden="true" className="size-5" />
+                      {voice.state === "listening" ? (
+                        <Square aria-hidden="true" className="size-4 fill-current" />
+                      ) : (
+                        <Mic aria-hidden="true" className="size-5" />
+                      )}
                     </Button>
                     <Button
-                      aria-label="Run computer request"
-                      disabled={busy || !request.trim() || !roots.length}
+                      aria-label="Run Windows request"
+                      disabled={busy || !request.trim()}
                       size="icon"
                       type="submit"
                     >
-                      {busy ? (
-                        <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-                      ) : (
-                        <Search aria-hidden="true" className="size-5" />
-                      )}
+                      {busy ? <LoaderCircle aria-hidden="true" className="size-5 animate-spin" /> : <Search aria-hidden="true" className="size-5" />}
                     </Button>
                   </div>
+                  {voice.state === "speaking" ? (
+                    <p aria-live="polite" className="mt-2 text-xs font-bold text-accent">
+                      Clearway is speaking. Wait for “Listening—speak now.”
+                    </p>
+                  ) : null}
+                  {voice.state === "listening" ? (
+                    <p aria-live="assertive" className="mt-2 text-xs font-bold text-success">
+                      Listening—speak now. Press the square when finished.
+                    </p>
+                  ) : null}
                 </form>
+
+                {busy ? (
+                  <Button className="mt-3 w-full" onClick={() => void stopComputer()} variant="secondary">
+                    <Square aria-hidden="true" className="size-3.5 fill-current" />
+                    Stop Windows task
+                  </Button>
+                ) : null}
+
+                {observation ? (
+                  <div className="mt-5 overflow-hidden rounded-[var(--radius-control)] border border-border bg-surface-subtle">
+                    {/* A live local screenshot returned by the Clearway Desktop bridge. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      alt={`Latest Windows view: ${observation.activeWindow.title}`}
+                      className="max-h-52 w-full object-contain"
+                      src={observation.screenshot.dataUrl}
+                    />
+                    <p className="truncate px-3 py-2 text-xs font-bold text-muted" title={observation.activeWindow.title}>
+                      Live Windows view · {observation.activeWindow.title || "Desktop"}
+                    </p>
+                  </div>
+                ) : null}
 
                 {activities.length ? (
                   <div className="mt-5 border-t border-border pt-4">
@@ -352,26 +393,18 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
 
                 {candidates.length ? (
                   <div className="mt-5 border-t border-border pt-4">
-                    <p className="font-bold">Files found</p>
+                    <p className="font-bold">Verified files</p>
                     <ul className="mt-3 divide-y divide-border">
                       {candidates.map((candidate) => (
                         <li className="py-4 first:pt-0" key={candidate.id}>
                           <div className="flex items-start gap-3">
                             <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-control)] bg-primary-soft text-primary">
-                              {candidate.extension.match(/png|jpe?g|webp|bmp/) ? (
-                                <ImageIcon aria-hidden="true" className="size-5" />
-                              ) : (
-                                <FileSearch aria-hidden="true" className="size-5" />
-                              )}
+                              {candidate.extension.match(/png|jpe?g|webp|bmp/) ? <ImageIcon aria-hidden="true" className="size-5" /> : <FileSearch aria-hidden="true" className="size-5" />}
                             </span>
                             <div className="min-w-0 flex-1">
                               <p className="truncate font-bold" title={candidate.name}>{candidate.name}</p>
-                              <p className="mt-0.5 truncate text-xs text-muted" title={candidate.displayPath}>
-                                {candidate.displayPath}
-                              </p>
-                              <p className="mt-2 text-sm leading-relaxed text-muted">
-                                {candidate.evidence[0]}
-                              </p>
+                              <p className="mt-0.5 truncate text-xs text-muted" title={candidate.displayPath}>{candidate.displayPath}</p>
+                              <p className="mt-2 text-sm leading-relaxed text-muted">{candidate.evidence[0]}</p>
                             </div>
                           </div>
                           {previews[candidate.id] ? (
@@ -384,14 +417,11 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
                             />
                           ) : null}
                           <div className="mt-3 flex flex-wrap gap-2">
-                            <Button onClick={() => void preview(candidate)} size="small" variant="secondary">
-                              Preview
-                            </Button>
+                            <Button onClick={() => void preview(candidate)} size="small" variant="secondary">Preview</Button>
                             <Button onClick={() => void openCandidate(candidate)} size="small" variant="quiet">
-                              <ExternalLink aria-hidden="true" className="size-4" />
-                              Open
+                              <ExternalLink aria-hidden="true" className="size-4" /> Open
                             </Button>
-                            <Button onClick={() => toggleLinked(candidate.id)} size="small" variant="quiet">
+                            <Button onClick={() => void toggleLinked(candidate.id)} size="small" variant="quiet">
                               {linked.has(candidate.id) ? <Check aria-hidden="true" className="size-4" /> : null}
                               {linked.has(candidate.id) ? "Added to case" : "Use for this case"}
                             </Button>
@@ -407,6 +437,9 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
                     {error}
                   </p>
                 ) : null}
+                <p className="mt-4 text-xs leading-relaxed text-muted">
+                  While a task runs, Clearway sends the visible screenshot and accessibility labels to its hosted planner. It will not type passwords or confirm destructive actions.
+                </p>
               </>
             )}
           </div>
@@ -418,7 +451,7 @@ export function ComputerAssistant({ locale }: { locale: SupportedLocale }) {
           type="button"
         >
           <FileSearch aria-hidden="true" className="size-5" />
-          Find a file
+          Use Windows
           <ChevronDown aria-hidden="true" className="size-4 rotate-180 opacity-70" />
         </button>
       )}
@@ -441,10 +474,7 @@ function ActivityMark({ phase }: { phase: ActivityEvent["phase"] }) {
   );
 }
 
-function collectCandidates(
-  result: ComputerToolResult,
-  target: Map<string, CandidateFile>,
-) {
+function collectCandidates(result: ComputerToolResult, target: Map<string, CandidateFile>) {
   for (const candidate of result.candidates ?? []) target.set(candidate.id, candidate);
   if (result.candidate) target.set(result.candidate.id, result.candidate);
 }
@@ -454,7 +484,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 function voiceRequestPrompt(locale: SupportedLocale) {
-  if (locale === "es-US") return "¿Qué archivo quiere que encuentre?";
-  if (locale === "zh-CN") return "您希望我查找什么文件？";
-  return "What file would you like me to find?";
+  if (locale === "es-US") return "¿Qué quiere que haga en Windows?";
+  if (locale === "zh-CN") return "您希望我在 Windows 中做什么？";
+  return "What would you like me to do in Windows?";
 }

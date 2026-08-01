@@ -2,9 +2,9 @@
 
 ## Overview
 
-Clearway keeps the existing Next.js/Vercel application as the visible product and adds a thin Electron Windows shell. The web application owns conversation, SSDI case state, agent orchestration, results, and narration. Electron owns folder consent and local read-only tools. Anthropic chooses typed actions from arbitrary requests; it never receives unrestricted machine access.
+Clearway keeps the existing Next.js/Vercel application as the visible product and uses Electron as its Windows execution boundary. The web application owns conversation, SSDI case state, agent orchestration, results, and narration. Electron owns screen capture, Windows UI Automation, bounded input actions, optional folder consent, verified evidence, and case-folder export. Anthropic chooses typed actions from arbitrary requests; it never receives unrestricted shell access.
 
-This design implements Requirements C1-C11 and deliberately excludes browser automation and general Windows UI Automation from the two-hour MVOP.
+This design implements Requirements C1-C13. Browser automation, credential entry, destructive actions, uploads, and SSA submission remain excluded.
 
 ## Design Principles
 
@@ -21,12 +21,12 @@ This design implements Requirements C1-C11 and deliberately excludes browser aut
 | Hosted interface | Existing Next.js App Router on Vercel | C1, C7, C11 |
 | Windows shell | Electron `BrowserWindow` and preload `contextBridge` | C2, C8 |
 | Planner | Existing Anthropic SDK with Zod structured output | C3, C9 |
-| Local execution | Node filesystem APIs in Electron main | C4, C8 |
+| Local execution | Electron desktop capture plus PowerShell/.NET UI Automation and SendInput | C4, C8, C12 |
 | PDF text | `pdf-parse` | C4, C5 |
 | Image OCR | `tesseract.js`, English worker | C4, C5 |
 | Speech input | Existing Deepgram transcription route | C3, C10, C11 |
 | Speech output | Existing Deepgram Aura 2 route; Mandarin browser/system voice | C6, C11 |
-| Forms | Existing Anvil adapters and packet route | C11 |
+| Forms and export | Anvil adapters, `fflate`, and native case-folder creation | C11, C13 |
 
 ## High-Level Architecture
 
@@ -38,7 +38,9 @@ graph LR
     Claude --> Web
     Web --> Bridge[window.clearwayDesktop]
     Bridge --> Main[Electron main process]
-    Main --> Files[Approved Windows folders]
+    Main --> Windows[Visible Windows apps and UI Automation]
+    Main --> Files[Optional approved-folder search]
+    Windows --> Main
     Files --> Main
     Main --> Bridge
     Bridge --> Web
@@ -56,30 +58,30 @@ The loop continues until the planner returns `finish`, `clarify`, or `error`, or
 1. Electron resolves `--url`, `CLEARWAY_WEB_URL`, or the deployed default.
 2. It derives one allowed origin and refuses navigation elsewhere.
 3. It creates a sandboxed `BrowserWindow` with a preload file.
-4. The preload exposes only `getEnvironment`, `chooseRoots`, `executeTool`, and `onActivity`.
+4. The preload exposes only named Clearway computer, evidence-link, stop, and case-export methods.
 5. IPC handlers reject calls whose sender origin differs from the configured origin.
 
-### 2. Folder approval (C2, C5)
+### 2. Windows observation (C2, C5)
 
 1. The renderer detects `window.clearwayDesktop`.
-2. The user opens the native multi-folder picker.
-3. Electron stores canonical paths in an in-memory map keyed by random root IDs.
-4. The renderer receives root IDs and display labels. Authorization disappears on exit.
+2. Electron captures the visible primary display and the active window's UI Automation tree.
+3. The hosted planner receives that bounded observation for the current action only.
+4. File access is granted only when a real File Explorer selection is registered during the session.
 
 ### 3. Request planning (C3, C9)
 
 1. The existing voice hook transcribes the request, or the user types it.
-2. The renderer sends the request, locale, sanitized environment, recent turns, and prior tool result to `/api/computer/turn`.
+2. The renderer sends the request, locale, sanitized environment, recent turns, prior tool result, latest screenshot, and active-window UI Automation elements to `/api/computer/turn`.
 3. Anthropic returns one schema-validated `Computer_Turn_Response`.
 4. The renderer either invokes one tool, presents a grounded result, asks a necessary clarification, or reports failure.
 
-### 4. Local search (C4, C5)
+### 4. Visible local-file discovery (C4, C5)
 
-1. `search_files` walks only selected roots and records metadata.
-2. It scores normalized runtime terms against names and paths.
-3. It extracts text from strong metadata matches and a bounded set of likely PDF/image/text candidates.
-4. It rescans content evidence, ranks candidates, and returns opaque IDs.
-5. A later `extract_text` action may inspect a specific candidate more deeply.
+1. The planner opens and navigates File Explorer through UI Automation or bounded screen coordinates.
+2. The person sees every search, selection, and opened preview on their desktop.
+3. The planner verifies a likely document from its filename, extracted contents, or visible contents instead of loose keyword overlap.
+4. `register_selected_file` reads the current Explorer selection and returns an opaque candidate ID.
+5. Later candidate actions may extract, preview, open, or link only that registered file.
 
 ### 5. Activity and narration (C6)
 
@@ -93,7 +95,17 @@ Candidate cards show actual filename, display path, modification time, and match
 
 ```ts
 type ComputerToolName =
-  | "search_files"
+  | "observe_windows"
+  | "open_file_explorer"
+  | "launch_app"
+  | "focus_window"
+  | "invoke_element"
+  | "click"
+  | "type_text"
+  | "press_keys"
+  | "scroll"
+  | "wait"
+  | "register_selected_file"
   | "extract_text"
   | "preview_candidate"
   | "open_candidate";
@@ -119,15 +131,17 @@ interface ComputerEnvironment {
 }
 
 type ComputerToolRequest =
-  | {
-      tool: "search_files";
-      args: {
-        query: string;
-        terms: string[];
-        extensions: string[];
-        maxResults: number;
-      };
-    }
+  | { tool: "observe_windows"; args: Record<string, never> }
+  | { tool: "open_file_explorer"; args: { location: "home" | "downloads" | "documents" | "desktop" } }
+  | { tool: "launch_app"; args: { app: string } }
+  | { tool: "focus_window"; args: { title: string } }
+  | { tool: "invoke_element"; args: { elementId: string } }
+  | { tool: "click"; args: { x: number; y: number } }
+  | { tool: "type_text"; args: { text: string } }
+  | { tool: "press_keys"; args: { keys: string[]; repeats: number } }
+  | { tool: "scroll"; args: { direction: "up" | "down"; amount: number } }
+  | { tool: "wait"; args: { milliseconds: number } }
+  | { tool: "register_selected_file"; args: Record<string, never> }
   | { tool: "extract_text"; args: { candidateId: string } }
   | { tool: "preview_candidate"; args: { candidateId: string } }
   | { tool: "open_candidate"; args: { candidateId: string } };
@@ -175,12 +189,12 @@ type ComputerTurnResponse =
 
 ## Correctness Properties
 
-1. **Property P1 — Path containment (C2, C8):** every inspected candidate resolves beneath an active Approved_Root.
+1. **Property P1 — Path authority (C2, C8, C12):** every inspected candidate resolves beneath an active Approved_Root or comes from a real selected File Explorer item registered in the current session.
 2. **Property P2 — Result provenance (C3, C10):** every returned candidate ID originated in the current native candidate map.
 3. **Property P3 — No false success (C4, C6, C9):** a finish response with candidates is displayed only when those IDs exist in a successful tool result.
 4. **Property P4 — Request independence (C3, C10):** changing the natural-language request changes runtime intent without requiring a code or configuration change.
 5. **Property P5 — Bounded disclosure (C5):** no server-bound excerpt exceeds the configured character limit and no preview data is sent to the planner.
-6. **Property P6 — Bounded execution (C9):** one request performs no more than eight native actions or sixty seconds.
+6. **Property P6 — Bounded execution (C9):** one request performs no more than twenty native actions or three minutes.
 7. **Property P7 — Narration truth (C6):** factual numbers in narration are sourced from tool results or activity events.
 8. **Property P8 — Case isolation (C7, C11):** computer-agent state changes do not mutate confirmed Applicant_Case facts.
 
@@ -196,6 +210,16 @@ type ComputerTurnResponse =
 - **Action/time limit:** terminate with an honest partial-results message.
 
 ## Testing Strategy
+
+### Visible Windows agent (C12)
+
+Clearway Desktop owns a native Windows controller. Each turn combines a bounded primary-display screenshot with the active window's UI Automation controls. The hosted planner returns one typed action; Electron executes it through a fixed PowerShell/.NET bridge using UI Automation and SendInput, waits for the UI to settle, and captures the next real observation. Direct file indexing remains an optional accelerator and never proves relevance by itself.
+
+File Explorer selections cross the trust boundary through `register_selected_file`. The native layer reads the actual selected path, creates an opaque Candidate_File, and only then allows the web application to present or link it.
+
+### Case-folder export (C13)
+
+The archive route generates separate PDF assets for the four SSA forms and evidence index. Clearway Desktop validates and extracts those assets into a newly created user-chosen directory, copies linked evidence with collision-safe names, writes `Missing supporting documents.txt` and `README.txt`, then opens the completed folder. Source evidence is copied, never moved.
 
 - Unit-test Zod contracts, path containment, traversal bounds, token scoring, excerpt caps, candidate IDs, and response-state validation.
 - Component-test bridge absent/connected states, folder consent, activity order, TTS failure, results, and keyboard access.

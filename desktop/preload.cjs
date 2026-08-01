@@ -3,9 +3,13 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("clearwayDesktop", {
   getEnvironment: () => ipcRenderer.invoke("clearway:get-environment"),
-  chooseRoots: () => ipcRenderer.invoke("clearway:choose-roots"),
   executeTool: (request) =>
     ipcRenderer.invoke("clearway:execute-tool", request),
+  stopComputer: () => ipcRenderer.invoke("clearway:stop-computer"),
+  linkCandidate: (request) =>
+    ipcRenderer.invoke("clearway:link-candidate", request),
+  listLinkedCandidates: () => ipcRenderer.invoke("clearway:list-linked"),
+  exportCase: (request) => ipcRenderer.invoke("clearway:export-case", request),
   onActivity: (listener) => {
     if (typeof listener !== "function") return () => {};
     const handler = (_event, activity) => listener(activity);

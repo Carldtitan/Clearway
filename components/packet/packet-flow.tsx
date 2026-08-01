@@ -7,6 +7,7 @@ import {
   Download,
   FileCheck2,
   FileText,
+  FolderDown,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
@@ -64,6 +65,7 @@ const baseDocuments: PacketDocument[] = [
 ];
 
 type GenerationStatus = "idle" | "generating" | "complete" | "failed";
+type FolderStatus = "idle" | "creating" | "complete" | "failed";
 
 export function PacketFlow() {
   const { applicantCase, dispatch, voiceSessionActive } = useApplicantCase();
@@ -104,6 +106,8 @@ export function PacketFlow() {
     documents: number;
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [folderStatus, setFolderStatus] = useState<FolderStatus>("idle");
+  const [folderMessage, setFolderMessage] = useState("");
   const downloadUrlRef = useRef<string | null>(null);
   const voiceBuildStartedRef = useRef(false);
   const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
@@ -245,6 +249,52 @@ export function PacketFlow() {
         state: { generatedRevision: null, status: "failed" },
       });
       return null;
+    }
+  }
+
+  async function createCaseFolder() {
+    if (!window.clearwayDesktop) {
+      setFolderStatus("failed");
+      setFolderMessage("Open Clearway Desktop to create a Windows case folder.");
+      return;
+    }
+    setFolderStatus("creating");
+    setFolderMessage("");
+    try {
+      const response = await fetch("/api/packet/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(applicantCase),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "Clearway could not prepare the five case documents.");
+      }
+      const missingDocuments = checklist
+        .filter((item) => item.status !== "ready" && item.status !== "obtained")
+        .map((item) => ({ label: item.label, reason: item.reason }));
+      const result = await window.clearwayDesktop.exportCase({
+        archive: await response.arrayBuffer(),
+        applicantName: applicantCase.applicant.legalName.value ?? "Applicant",
+        missingDocuments,
+      });
+      if (result.canceled) {
+        setFolderStatus("idle");
+        return;
+      }
+      if (!result.ok) throw new Error("Clearway could not create the case folder.");
+      setFolderStatus("complete");
+      setFolderMessage(
+        `${result.formCount ?? 5} generated documents and ${result.evidenceCount ?? 0} supporting files are in ${result.path}.`,
+      );
+      await voice.speak("Your Clearway case folder is ready and open in File Explorer.");
+    } catch (folderError) {
+      setFolderStatus("failed");
+      setFolderMessage(
+        folderError instanceof Error
+          ? folderError.message
+          : "Clearway could not create the case folder.",
+      );
     }
   }
 
@@ -413,17 +463,41 @@ export function PacketFlow() {
                 </Button>
               )}
               {status === "complete" ? (
-                <Button
-                  onClick={() =>
-                    dispatch({ type: "SET_STAGE", stage: "records" })
-                  }
-                  variant="secondary"
-                >
-                  Track medical records
-                  <ArrowRight aria-hidden="true" className="size-4" />
-                </Button>
+                <>
+                  <Button
+                    disabled={folderStatus === "creating"}
+                    onClick={() => void createCaseFolder()}
+                    variant="secondary"
+                  >
+                    {folderStatus === "creating" ? (
+                      <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                    ) : (
+                      <FolderDown aria-hidden="true" className="size-4" />
+                    )}
+                    {folderStatus === "creating" ? "Creating case folder" : "Create case folder"}
+                  </Button>
+                  <Button
+                    onClick={() => dispatch({ type: "SET_STAGE", stage: "records" })}
+                    variant="secondary"
+                  >
+                    Track medical records
+                    <ArrowRight aria-hidden="true" className="size-4" />
+                  </Button>
+                </>
               ) : null}
             </div>
+
+            {folderMessage ? (
+              <p
+                aria-live={folderStatus === "failed" ? "assertive" : "polite"}
+                className={cn(
+                  "mt-4 text-sm font-bold",
+                  folderStatus === "failed" ? "text-danger" : "text-success",
+                )}
+              >
+                {folderMessage}
+              </p>
+            ) : null}
 
             <p className="mt-4 text-xs leading-relaxed text-muted">
               This is an applicant working copy. Review it, sign where shown,

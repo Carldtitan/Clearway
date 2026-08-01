@@ -21,23 +21,23 @@ This plan implements the Clearway requirements and design in dependency order. N
   - [x] 2.1 Add Electron main/preload entrypoints and desktop scripts.
     - _Requirements: C2.1, C8.1-C8.5_
     - **Verification:** `npm run desktop:dev` loads the local Clearway page with `window.clearwayDesktop` available.
-  - [x] 2.2 Add native multi-folder approval and in-memory Approved_Root storage.
+  - [x] 2.2 Add bounded screenshot capture, UI Automation observation, and session-only file authorization from a real Explorer selection.
     - _Requirements: C2.2-C2.4_
-    - **Verification:** selected roots appear in `getEnvironment`; an unselected path is rejected.
+    - **Verification:** the read-only native check captures a screenshot and active-window controls; unregistered paths are rejected.
   - [x] 2.3 Emit native activity events and validate sender origin for every IPC handler.
     - _Requirements: C6.1, C8.3-C8.4_
     - **Verification:** invalid-origin and malformed calls fail without filesystem access.
 
-- [x] 3. Implement generic local tools — 40 minutes
-  - [x] 3.1 Implement bounded recursive metadata discovery and arbitrary runtime scoring.
-    - _Requirements: C3.2-C3.3, C4.1-C4.2, C8.5_
-    - **Verification:** two unrelated queries rank different real files without code changes.
-  - [x] 3.2 Add local text/PDF extraction and local image OCR.
-    - _Requirements: C4.3-C4.4, C5.1-C5.3_
-    - **Verification:** a poorly named image is found from its OCR text and no full file reaches the server.
+- [x] 3. Implement visible Windows tools — 40 minutes
+  - [x] 3.1 Add bounded UI Automation invoke, focus, keyboard, mouse, scroll, app-launch, and wait actions.
+    - _Requirements: C3.2-C3.3, C4.1-C4.2, C8.5, C12.1-C12.5_
+    - **Verification:** the desktop executor can observe the current screen and drive a real accessible control without arbitrary shell access.
+  - [x] 3.2 Register real Explorer selections and add local text/PDF extraction and image OCR.
+    - _Requirements: C4.3-C4.5, C5.1-C5.3, C12.6_
+    - **Verification:** only a visibly selected file becomes a candidate, and no full file reaches the server.
   - [x] 3.3 Add opaque Candidate_File results, bounded preview, and safe open behavior.
     - _Requirements: C4.5-C4.6, C7.1-C7.2_
-    - **Verification:** candidate operations work by ID; unknown IDs and traversal attempts fail.
+    - **Verification:** candidate operations work by ID; unknown IDs and renderer-supplied paths fail.
 
 - [x] 4. Implement the hosted Computer_Agent loop — 30 minutes
   - [x] 4.1 Add shared schemas and `POST /api/computer/turn` using Anthropic structured output.
@@ -53,7 +53,7 @@ This plan implements the Clearway requirements and design in dependency order. N
     - **Verification:** the control remains reachable across Application, Documents, and Records and works without a mouse.
   - [x] 5.2 Add chronological activity, serialized Deepgram narration, and visible fallback.
     - _Requirements: C6.1-C6.6_
-    - **Verification:** actual search counts appear in the visible and spoken sequence; forced TTS failure does not stop search.
+    - **Verification:** actual Windows actions appear in the visible and spoken sequence; forced TTS failure does not stop execution.
   - [x] 5.3 Add candidate result, preview/open, and in-memory case-association UI.
     - _Requirements: C7.1-C7.4_
     - **Verification:** a candidate can be inspected and linked without changing confirmed Applicant_Case facts.
@@ -69,6 +69,22 @@ This plan implements the Clearway requirements and design in dependency order. N
     - _Requirements: C1, C2.1, C10.4_
     - **Verification:** the configured deployed origin completes the same fresh-input path.
 
+- [x] 7. Replace search-only behavior with visible Windows computer use
+  - [x] 7.1 Add screen capture, active-window UI Automation observation, and bounded app/input actions.
+    - _Requirements: C12.1-C12.3, C12.5_
+  - [x] 7.2 Add a screenshot-aware hosted planning loop, post-action verification, and Stop control.
+    - _Requirements: C12.1-C12.4_
+  - [x] 7.3 Register real File Explorer selections as opaque case candidates.
+    - _Requirements: C12.6_
+
+- [x] 8. Create the complete local case-folder path
+  - [x] 8.1 Generate the five core documents as separate PDF assets.
+    - _Requirements: C13.1-C13.2_
+  - [x] 8.2 Persist explicit case links in the desktop session and copy those files during export.
+    - _Requirements: C7.3, C13.3_
+  - [x] 8.3 Add unique-folder creation, missing-document and README files, and final Explorer opening.
+    - _Requirements: C13.4-C13.5_
+
 ## Dependency Graph
 
 ```text
@@ -83,4 +99,4 @@ This plan implements the Clearway requirements and design in dependency order. N
 ## Notes
 
 - `npm run desktop` is the MVOP Windows delivery; installer packaging follows only after the live path passes.
-- Browser and general Windows UI Automation use the same future tool contract but are not allowed to displace the fresh local-file path in this build.
+- Browser automation remains later work. General Windows UI Automation, visible app control, and case-folder export are now part of this build.

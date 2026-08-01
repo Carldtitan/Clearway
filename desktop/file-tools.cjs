@@ -48,6 +48,8 @@ const STOP_WORDS = new Set([
 function createFileTools({ emit, openPath, ocrCachePath }) {
   const roots = new Map();
   const candidates = new Map();
+  const selectedPaths = new Set();
+  const linkedCandidates = new Set();
   const textCache = new Map();
   let ocrWorkerPromise = null;
 
@@ -122,6 +124,7 @@ function createFileTools({ emit, openPath, ocrCachePath }) {
     if (request.tool === "extract_text") return extractCandidate(request.args || {});
     if (request.tool === "preview_candidate") return previewCandidate(request.args || {});
     if (request.tool === "open_candidate") return openCandidate(request.args || {});
+    if (request.tool === "link_candidate") return linkCandidate(request.args || {});
     throw new Error("Clearway refused an unsupported computer action.");
   }
 
@@ -284,10 +287,83 @@ function createFileTools({ emit, openPath, ocrCachePath }) {
   function getCandidate(candidateId) {
     if (typeof candidateId !== "string") throw new Error("Choose a discovered file first.");
     const file = candidates.get(candidateId);
-    if (!file || !isInsideApprovedRoot(file.fullPath)) {
+    if (!file || (!isInsideApprovedRoot(file.fullPath) && !selectedPaths.has(file.fullPath))) {
       throw new Error("That file is not available in this Clearway session.");
     }
     return [candidateId, file];
+  }
+
+  async function registerPaths(filePaths) {
+    if (!Array.isArray(filePaths) || !filePaths.length) {
+      throw new Error("Select a file in File Explorer before adding it to the case.");
+    }
+    const registered = [];
+    for (const filePath of filePaths.slice(0, 5)) {
+      if (typeof filePath !== "string") continue;
+      const canonical = await fs.realpath(filePath);
+      const stats = await fs.stat(canonical);
+      if (!stats.isFile() || stats.size > LIMITS.maxFileBytes) continue;
+      selectedPaths.add(canonical);
+      const file = {
+        rootId: "windows-selection",
+        fullPath: canonical,
+        relativePath: path.basename(canonical),
+        name: path.basename(canonical),
+        extension: path.extname(canonical).toLowerCase(),
+        size: stats.size,
+        modifiedAt: stats.mtime.toISOString(),
+        modifiedMs: stats.mtimeMs,
+        score: 100,
+        evidence: ["Selected in File Explorer and verified from the live Windows session."],
+      };
+      if (SUPPORTED_EXTENSIONS.has(file.extension)) {
+        try {
+          file.excerpt = await extractText(file, { allowOcr: true });
+        } catch {
+          // The selection remains valid even when its contents cannot be extracted.
+        }
+      }
+      const id = crypto.randomUUID();
+      candidates.set(id, file);
+      registered.push(publicCandidate(id, file));
+    }
+    if (!registered.length) {
+      throw new Error("The selected item is not a supported file or is larger than 15 MB.");
+    }
+    activity(
+      "completed",
+      `I added ${registered.length} selected ${registered.length === 1 ? "file" : "files"} as verified case evidence.`,
+      true,
+    );
+    return { ok: true, tool: "register_selected_file", candidates: registered };
+  }
+
+  function linkCandidate(args) {
+    const [id, file] = getCandidate(args.candidateId);
+    const linked = args.linked !== false;
+    if (linked) linkedCandidates.add(id);
+    else linkedCandidates.delete(id);
+    return {
+      ok: true,
+      tool: "link_candidate",
+      linked,
+      candidate: publicCandidate(id, file),
+    };
+  }
+
+  function listLinkedCandidates() {
+    return [...linkedCandidates]
+      .map((id) => {
+        const file = candidates.get(id);
+        return file ? publicCandidate(id, file) : null;
+      })
+      .filter(Boolean);
+  }
+
+  function getLinkedFiles() {
+    return [...linkedCandidates]
+      .map((id) => candidates.get(id))
+      .filter(Boolean);
   }
 
   function isInsideApprovedRoot(filePath) {
@@ -382,7 +458,18 @@ function createFileTools({ emit, openPath, ocrCachePath }) {
     }
   }
 
-  return { dispose, execute, getEnvironment, listRoots, setRoots };
+  return {
+    dispose,
+    execute,
+    getCandidate,
+    getLinkedFiles,
+    getEnvironment,
+    linkCandidate,
+    listLinkedCandidates,
+    listRoots,
+    registerPaths,
+    setRoots,
+  };
 }
 
 function publicCandidate(id, file) {

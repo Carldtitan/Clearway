@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Clearway extends the existing voice-guided SSDI application product with real, read-only Windows document discovery. The hosted Vercel application remains the primary interface. A Clearway Desktop shell grants the web interface narrow local capabilities after the user approves folders.
+Clearway extends the existing voice-guided SSDI application product with visible, read-only Windows computer use. The hosted Vercel application remains the primary interface. Clearway Desktop observes the real screen and Windows accessibility tree, operates desktop applications, verifies selected evidence, and creates the final local case folder.
 
 The computer-use feature must satisfy the current hack rule: a fresh, messy file request must produce an actual result without forced outputs, prerecorded actions, or document-specific branching. An explicitly labeled Elena Rivera sample case may prefill the existing SSDI application for a fast stage walkthrough, but it must never supply or alter computer-use requests, actions, candidates, or results. The agent may understand SSDI context, but its computer tools must accept arbitrary natural-language file requests such as “find my driver's license” or “find the lease Jordan signed.”
 
@@ -10,8 +10,8 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 
 1. Every claimed computer action and result must come from an actual native tool event.
 2. No document type, filename, path, result, or success state may be predetermined for the judged flow.
-3. Only folders approved by the user in the current desktop session may be inspected.
-4. V1 computer use is read-only. It may search, inspect, preview, and open; it may not move, delete, upload, sign, or submit.
+3. Local files enter the case only after Clearway visibly finds and selects them in File Explorer.
+4. V1 computer use is read-only. It may open apps, navigate, search, inspect, preview, select, and open; it may not delete, move existing files, upload, sign, send, purchase, or submit.
 5. Spoken activity must always have an equivalent visible status.
 6. Existing SSDI completion, validation, Anvil generation, and accessibility behavior must continue working.
 
@@ -20,10 +20,9 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 - **Clearway**: The complete voice-guided SSDI preparation product.
 - **Clearway_Desktop**: The Electron Windows shell that loads the deployed Clearway web application and exposes a constrained preload bridge.
 - **Computer_Agent**: The hosted planning loop that converts arbitrary user requests and real tool results into the next typed action.
-- **Computer_Environment**: A sanitized description of Windows, available capabilities, and user-approved roots.
-- **Approved_Root**: A folder selected by the user and authorized only for the current desktop session.
+- **Computer_Environment**: A sanitized description of Windows and the bounded capabilities available to the planner.
 - **Computer_Tool**: A typed, read-only native capability available to the Computer_Agent.
-- **Candidate_File**: A real file discovered beneath an Approved_Root and represented to the web application by an opaque identifier.
+- **Candidate_File**: A real file selected in File Explorer and represented to the web application by an opaque session identifier.
 - **Activity_Event**: A truthful started, progress, completed, or failed event emitted by native execution.
 - **Fresh_Input_Run**: A run against content not encoded into Clearway and not selected because of a known output.
 
@@ -41,15 +40,15 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 
 ### Requirement C2: Desktop Connection and Consent
 
-**User Story:** As an applicant, I want to choose where Clearway may look so that it cannot silently scan my computer.
+**User Story:** As an applicant, I want visible, temporary computer access so that Clearway cannot silently scan my computer.
 
 #### Acceptance Criteria
 
 1. WHEN the Vercel app runs inside Clearway_Desktop, THE interface SHALL show that local computer access is connected.
-2. WHEN local access has not been granted, THE user SHALL be able to choose one or more folders through the native Windows folder picker.
-3. THE native executor SHALL reject any path outside the current Approved_Root set.
-4. THE authorization SHALL expire when Clearway_Desktop exits.
-5. WHEN the app runs in a normal browser, THE interface SHALL explain that Clearway_Desktop is required for local search without pretending that search occurred.
+2. BEFORE a task starts, THE interface SHALL disclose that the current screenshot and accessibility labels are sent to the hosted planner.
+3. THE native executor SHALL expose a local file only after the user can see it selected in File Explorer.
+4. THE file authorization and candidate IDs SHALL expire when Clearway_Desktop exits.
+5. WHEN the app runs in a normal browser, THE interface SHALL explain that Clearway_Desktop is required for Windows control without pretending that control occurred.
 
 ### Requirement C3: Arbitrary Natural-Language Requests
 
@@ -63,17 +62,17 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 4. THE Computer_Agent SHALL receive Computer_Environment context before choosing its first action.
 5. THE Computer_Agent SHALL base every later action on the actual preceding Computer_Tool result.
 
-### Requirement C4: Generic Local File Discovery
+### Requirement C4: Visible Local File Discovery
 
 **User Story:** As an applicant, I want Clearway to inspect real filenames and contents so that it can find poorly named documents.
 
 #### Acceptance Criteria
 
-1. THE search tool SHALL recursively inspect real files beneath Approved_Root values subject to explicit file-count, size, depth, and time limits.
-2. THE search tool SHALL rank filename, path, extension, modified time, and extracted-content evidence against arbitrary search intent supplied at runtime.
-3. THE executor SHALL support text files, text PDFs, and common image formats in the MVOP.
-4. WHEN an image has an unhelpful filename, THE executor SHALL be able to run local English OCR and use the extracted text as evidence.
-5. THE executor SHALL return Candidate_File records with actual names, display paths, timestamps, match evidence, and opaque IDs.
+1. THE agent SHALL use visible File Explorer navigation and search controls rather than a hidden keyword index.
+2. THE agent SHALL reason over the current screenshot and accessibility controls after each action.
+3. AFTER a real Explorer selection is registered, THE executor SHALL support local extraction from text files, text PDFs, and common image formats.
+4. WHEN a selected image needs inspection, THE executor SHALL be able to run local English OCR and use the extracted text as evidence.
+5. THE executor SHALL return Candidate_File records with actual names, display paths, timestamps, verification evidence, and opaque IDs.
 6. WHEN nothing is sufficiently relevant, THE result SHALL say no confident match was found and SHALL NOT manufacture one.
 
 ### Requirement C5: Local-First Analysis and Data Minimization
@@ -82,11 +81,11 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 
 #### Acceptance Criteria
 
-1. THE desktop executor SHALL perform traversal, parsing, OCR, and preview generation locally.
-2. THE web agent MAY receive metadata and bounded text excerpts from likely candidates.
-3. THE web agent SHALL NOT receive complete local files or raw candidate images in this MVOP.
+1. THE desktop executor SHALL perform file parsing, OCR, and preview generation locally after visible selection.
+2. THE web agent MAY receive metadata, bounded text excerpts, the active-window accessibility tree, and a bounded screenshot while a visible task is running.
+3. THE web agent SHALL NOT receive complete local files; the interface SHALL disclose that current-screen images are sent to the hosted planner during computer use.
 4. THE server SHALL reject excerpts above the configured length and SHALL use `Cache-Control: no-store`.
-5. THE application SHALL NOT persist Approved_Root values, Candidate_File data, excerpts, or computer-agent history after the session.
+5. THE application SHALL NOT persist Candidate_File data, excerpts, or computer-agent history after the session.
 
 ### Requirement C6: Truthful Visible and Spoken Activity
 
@@ -107,7 +106,7 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 
 #### Acceptance Criteria
 
-1. WHEN a search completes, THE interface SHALL show ranked Candidate_File results and the evidence supporting each match.
+1. WHEN a file request completes, THE interface SHALL show verified Candidate_File results and the evidence supporting each match.
 2. THE user SHALL be able to preview a supported candidate or open it in the normal Windows application.
 3. THE user SHALL be able to associate a candidate with a current case document need in memory without uploading or moving the file.
 4. A later correction or search SHALL NOT erase confirmed application answers or generated-form state.
@@ -122,7 +121,7 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 2. THE Electron renderer SHALL run with Node integration disabled, context isolation enabled, sandboxing enabled, and web security enabled.
 3. EVERY IPC request SHALL validate its sender origin and input contract.
 4. THE preload bridge SHALL expose named Clearway methods and SHALL NOT expose `ipcRenderer`, Node APIs, PowerShell, or arbitrary shell execution.
-5. Native tools SHALL accept opaque root and candidate identifiers rather than renderer-supplied absolute paths.
+5. Native candidate tools SHALL accept opaque candidate identifiers rather than renderer-supplied absolute paths.
 
 ### Requirement C9: Bounded Agent Execution and Recovery
 
@@ -130,7 +129,7 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 
 #### Acceptance Criteria
 
-1. THE Computer_Agent SHALL execute at most eight actions and sixty seconds for one request.
+1. THE Computer_Agent SHALL execute at most twenty actions and three minutes for one request.
 2. THE planner SHALL return exactly one of `act`, `finish`, `clarify`, or `error` per turn.
 3. THE client SHALL reject malformed actions before invoking the desktop bridge.
 4. IF Anthropic, OCR, parsing, folder access, or native execution fails, THEN Clearway SHALL preserve application state and explain the failed step and next option.
@@ -143,8 +142,8 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 #### Acceptance Criteria
 
 1. THE production interface MAY expose the labeled Elena Rivera sample application loader, but SHALL contain no demo query parameter, prerecorded fallback, synthetic computer-use result, or forced computer-use result path.
-2. A file added or renamed after Clearway starts SHALL be discoverable on the next search without rebuilding or changing configuration.
-3. Two unrelated natural-language searches SHALL produce plans and results grounded in their respective real inputs.
+2. A file added or renamed after Clearway starts SHALL be discoverable on the next request without rebuilding or changing configuration.
+3. Two unrelated natural-language requests SHALL produce plans and results grounded in their respective real inputs.
 4. THE live path SHALL run from voice request through STT, planning, native execution, result display, and TTS narration.
 
 ### Requirement C11: Existing SSDI and Voice Regression Safety
@@ -157,3 +156,28 @@ The computer-use feature must satisfy the current hack rule: a fresh, messy file
 2. Clearway SHALL preserve Deepgram transcription, Deepgram Aura 2 English and Spanish speech, and the Mandarin system-voice fallback.
 3. Clearway SHALL preserve canonical case confirmation, completeness checks, form adapters, Anvil packet generation, and no-store responses.
 4. Clearway SHALL remain keyboard operable, screen-reader understandable, responsive at 320 CSS pixels, and usable at 200 percent zoom.
+
+### Requirement C12: Visible Windows Computer Use
+
+**User Story:** As an applicant, I want Clearway to operate the same desktop applications I can see so that it can complete multi-step computer work instead of only querying a folder index.
+
+#### Acceptance Criteria
+
+1. THE desktop executor SHALL capture the real Windows screen and active-window UI Automation controls after every GUI-changing action.
+2. THE Computer_Agent SHALL be able to open supported apps, focus windows, invoke accessible controls, click visible coordinates, type, press bounded key chords, scroll, and wait.
+3. THE executor SHALL prefer UI Automation controls and SHALL use screenshot coordinates only when an accessible control is unavailable.
+4. THE interface SHALL expose the latest Windows view, current action, and an immediate Stop control.
+5. THE executor SHALL block terminals, credential surfaces, destructive controls, submission, purchase, upload, and system-security changes.
+6. A local document SHALL become a Candidate_File only after a real selected File Explorer item is registered.
+
+### Requirement C13: Complete Local Case Folder
+
+**User Story:** As an applicant, I want one organized folder containing my generated application and evidence so that I know what is ready and what remains missing.
+
+#### Acceptance Criteria
+
+1. AFTER document generation, Clearway_Desktop SHALL allow the user to choose where a new case folder is created.
+2. THE folder SHALL contain separate PDFs for SSA-16, SSA-3368, SSA-3369, SSA-827, and the evidence index.
+3. THE folder SHALL copy every Candidate_File explicitly linked to the case without moving or changing its source file.
+4. THE folder SHALL contain a plain-text list of supporting documents still marked missing.
+5. THE exporter SHALL use a new unique directory, reject unsafe archive entries, avoid overwriting existing files, and open the finished folder in File Explorer.

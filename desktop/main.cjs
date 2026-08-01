@@ -11,6 +11,8 @@ const {
 } = require("electron");
 
 const { createFileTools } = require("./file-tools.cjs");
+const { createWindowsControl } = require("./windows-control.cjs");
+const { exportCaseFolder } = require("./case-export.cjs");
 
 const DEFAULT_WEB_URL = "https://clearway-kappa.vercel.app";
 const requestedUrl = readUrlArgument() || process.env.CLEARWAY_WEB_URL || DEFAULT_WEB_URL;
@@ -18,6 +20,26 @@ const webUrl = new URL(requestedUrl);
 const allowedOrigin = webUrl.origin;
 let mainWindow = null;
 let fileTools = null;
+let windowsControl = null;
+
+const WINDOWS_CAPABILITIES = [
+  "observe_windows",
+  "open_file_explorer",
+  "launch_app",
+  "focus_window",
+  "invoke_element",
+  "click",
+  "type_text",
+  "press_keys",
+  "scroll",
+  "wait",
+  "register_selected_file",
+];
+const VERIFIED_FILE_CAPABILITIES = [
+  "extract_text",
+  "preview_candidate",
+  "open_candidate",
+];
 
 function readUrlArgument() {
   const argument = process.argv.find((value) => value.startsWith("--url="));
@@ -42,27 +64,57 @@ function assertAllowedSender(event) {
 function registerIpc() {
   ipcMain.handle("clearway:get-environment", async (event) => {
     assertAllowedSender(event);
-    return fileTools.getEnvironment({
+    const environment = fileTools.getEnvironment({
       platform: process.platform,
       release: os.release(),
       arch: process.arch,
     });
-  });
-
-  ipcMain.handle("clearway:choose-roots", async (event) => {
-    assertAllowedSender(event);
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: "Choose folders Clearway may search",
-      buttonLabel: "Allow these folders",
-      properties: ["openDirectory", "multiSelections"],
-    });
-    if (result.canceled) return fileTools.listRoots();
-    return fileTools.setRoots(result.filePaths);
+    return {
+      ...environment,
+      capabilities: [...WINDOWS_CAPABILITIES, ...VERIFIED_FILE_CAPABILITIES],
+    };
   });
 
   ipcMain.handle("clearway:execute-tool", async (event, request) => {
     assertAllowedSender(event);
+    if (request?.tool === "register_selected_file") {
+      const paths = await windowsControl.getSelectedFiles();
+      return fileTools.registerPaths(paths);
+    }
+    if (WINDOWS_CAPABILITIES.includes(request?.tool)) {
+      return windowsControl.execute(request);
+    }
+    if (!VERIFIED_FILE_CAPABILITIES.includes(request?.tool)) {
+      throw new Error("Clearway requires visible Windows control for this task.");
+    }
     return fileTools.execute(request);
+  });
+
+  ipcMain.handle("clearway:stop-computer", async (event) => {
+    assertAllowedSender(event);
+    windowsControl.stop();
+    return { ok: true };
+  });
+
+  ipcMain.handle("clearway:link-candidate", async (event, request) => {
+    assertAllowedSender(event);
+    return fileTools.linkCandidate(request || {});
+  });
+
+  ipcMain.handle("clearway:list-linked", async (event) => {
+    assertAllowedSender(event);
+    return fileTools.listLinkedCandidates();
+  });
+
+  ipcMain.handle("clearway:export-case", async (event, request) => {
+    assertAllowedSender(event);
+    return exportCaseFolder({
+      ...request,
+      dialog,
+      linkedFiles: fileTools.getLinkedFiles(),
+      mainWindow,
+      shell,
+    });
   });
 }
 
@@ -109,6 +161,13 @@ app.whenReady().then(async () => {
     },
     openPath(filePath) {
       return shell.openPath(filePath);
+    },
+  });
+  windowsControl = createWindowsControl({
+    emit(activity) {
+      if (!mainWindow?.isDestroyed()) {
+        mainWindow.webContents.send("clearway:activity", activity);
+      }
     },
   });
   session.defaultSession.setPermissionRequestHandler(
