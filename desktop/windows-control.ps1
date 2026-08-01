@@ -19,6 +19,11 @@ public static class ClearwayNative {
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, int data, UIntPtr extra);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] static extern IntPtr SetFocus(IntPtr hWnd);
   [DllImport("user32.dll")] static extern uint SendInput(uint count, INPUT[] inputs, int size);
 
   const uint INPUT_KEYBOARD = 1;
@@ -46,6 +51,27 @@ public static class ClearwayNative {
     for (int repeat = 0; repeat < repeats; repeat++) {
       foreach (ushort key in keys) Key(key, false);
       for (int index = keys.Length - 1; index >= 0; index--) Key(keys[index], true);
+    }
+  }
+
+  public static bool FocusWindow(IntPtr handle) {
+    if (handle == IntPtr.Zero) return false;
+    IntPtr foreground = GetForegroundWindow();
+    uint ignored;
+    uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out ignored);
+    uint targetThread = GetWindowThreadProcessId(handle, out ignored);
+    uint currentThread = GetCurrentThreadId();
+    bool attachedTarget = targetThread != 0 && targetThread != currentThread && AttachThreadInput(currentThread, targetThread, true);
+    bool attachedForeground = foregroundThread != 0 && foregroundThread != currentThread && foregroundThread != targetThread && AttachThreadInput(currentThread, foregroundThread, true);
+    try {
+      ShowWindowAsync(handle, 9);
+      BringWindowToTop(handle);
+      bool focused = SetForegroundWindow(handle);
+      SetFocus(handle);
+      return focused || GetForegroundWindow() == handle;
+    } finally {
+      if (attachedForeground) AttachThreadInput(currentThread, foregroundThread, false);
+      if (attachedTarget) AttachThreadInput(currentThread, targetThread, false);
     }
   }
 }
@@ -191,6 +217,18 @@ function Key-Code($name) {
   return [uint16]$codes[$name]
 }
 
+function Focus-AutomationWindow($element) {
+  if ($null -eq $element) { throw "That window is not open." }
+  $handle = [IntPtr]$element.Current.NativeWindowHandle
+  if ($handle -ne [IntPtr]::Zero -and [ClearwayNative]::FocusWindow($handle)) {
+    return
+  }
+  $windowActivator = New-Object -ComObject WScript.Shell
+  if ($windowActivator.AppActivate([int]$element.Current.ProcessId)) { return }
+  try { $element.SetFocus(); return } catch {}
+  throw "Windows could not focus that window."
+}
+
 function Get-ObservationResult {
   $window = Get-ActiveWindow
   return [ordered]@{
@@ -214,7 +252,7 @@ function Perform-ComputerAction($tool, $args) {
       $targetWindow = $openWindows | Where-Object { $_.Current.Name -like "*$($args.windowTitle)*" } | Select-Object -First 1
     }
     if ($targetWindow) {
-      $targetWindow.SetFocus()
+      Focus-AutomationWindow $targetWindow
       Start-Sleep -Milliseconds 120
       $current = Get-ActiveWindow
     }
@@ -226,7 +264,7 @@ function Perform-ComputerAction($tool, $args) {
       $windows = $root.FindAll([Windows.Automation.TreeScope]::Children, $condition)
       $match = $windows | Where-Object { $_.Current.Name -like "*$($args.title)*" } | Select-Object -First 1
       if (-not $match) { throw "That window is not open." }
-      $match.SetFocus()
+      Focus-AutomationWindow $match
     }
     "invoke_element" {
       if (-not $current) { throw "No active window is available." }
@@ -280,7 +318,7 @@ switch ($Action) {
     $windows = $root.FindAll([Windows.Automation.TreeScope]::Children, $condition)
     $match = $windows | Where-Object { $_.Current.Name -like "*$($payload.title)*" } | Select-Object -First 1
     if (-not $match) { throw "That window is not open." }
-    $match.SetFocus()
+    Focus-AutomationWindow $match
     $result = @{ ok = $true }
   }
   "InvokeElement" {
