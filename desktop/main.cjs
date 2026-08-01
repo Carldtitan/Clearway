@@ -12,7 +12,7 @@ const {
 
 const { createFileTools } = require("./file-tools.cjs");
 
-const DEFAULT_WEB_URL = "https://alix-jo.vercel.app";
+const DEFAULT_WEB_URL = "https://clearway-kappa.vercel.app";
 const requestedUrl = readUrlArgument() || process.env.CLEARWAY_WEB_URL || DEFAULT_WEB_URL;
 const webUrl = new URL(requestedUrl);
 const allowedOrigin = webUrl.origin;

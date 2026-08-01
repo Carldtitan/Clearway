@@ -1,6 +1,6 @@
 # Clearway
 
-**Live application:** [alix-jo.vercel.app](https://alix-jo.vercel.app/)
+**Live application:** [clearway-kappa.vercel.app](https://clearway-kappa.vercel.app/)
 
 Clearway helps a person prepare an SSDI application, organize supporting records, and find real documents on an approved Windows computer through a guided conversation.
 
@@ -21,7 +21,7 @@ Clearway brings the practical structure of a benefits-navigation interview into 
 
 ## Try Clearway
 
-Open the [live Vercel deployment](https://alix-jo.vercel.app/) in a current browser:
+Open the [live Vercel deployment](https://clearway-kappa.vercel.app/) in a current browser:
 
 1. Choose English, Spanish, or Mandarin.
 2. Allow microphone access and begin the guided conversation.
