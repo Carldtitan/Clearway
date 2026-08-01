@@ -25,6 +25,7 @@ The responsive Next.js application is hosted on Vercel. Clearway Desktop is an E
 ## Capabilities and Constraints
 
 - The current packet contains SSA-16, SSA-3368, SSA-3369, SSA-827, continuation sheets, and an evidence index.
+- An explicitly labeled Elena Rivera sample case may prefill the SSDI answers for a fast stage walkthrough; it never supplies computer-search requests or results.
 - Local computer use is limited to read-only search, inspection, preview, and opening of files inside folders the user approves for the current session.
 - Computer requests are arbitrary natural language within the available tools; document names and successful results are never predetermined.
 - Browser automation, general Windows UI Automation, uploads, deletion, moving files, and SSA submission are later work.

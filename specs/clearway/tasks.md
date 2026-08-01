@@ -13,9 +13,9 @@ This plan implements the Clearway requirements and design in dependency order. N
   - [x] 1.2 Rename product, package, translations, packet metadata, downloads, documentation, and tests to Clearway.
     - _Requirements: C1.1-C1.2_
     - **Verification:** retired-brand scans across tracked text and filenames return no matches.
-  - [x] 1.3 Remove the runtime synthetic loader, query-parameter demo path, prerecorded fallback, and visible Demo action.
+  - [x] 1.3 Keep the labeled Elena sample application shortcut separate from live computer use, and remove query-parameter and prerecorded result shortcuts.
     - _Requirements: C10.1_
-    - **Verification:** production code has no synthetic loader, demo query parameter, or prerecorded packet fallback path.
+    - **Verification:** Elena can prefill only the application case; production code has no demo query parameter, prerecorded packet fallback, or synthetic computer-use result path.
 
 - [x] 2. Build the secure Clearway Desktop shell — 20 minutes
   - [x] 2.1 Add Electron main/preload entrypoints and desktop scripts.

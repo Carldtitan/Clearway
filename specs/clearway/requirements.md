@@ -4,7 +4,7 @@
 
 Clearway extends the existing voice-guided SSDI application product with real, read-only Windows document discovery. The hosted Vercel application remains the primary interface. A Clearway Desktop shell grants the web interface narrow local capabilities after the user approves folders.
 
-The feature must satisfy the current hack rule: a fresh, messy input must produce an actual result without synthetic cases, forced outputs, prerecorded actions, or document-specific branching. The agent may understand SSDI context, but its computer tools must accept arbitrary natural-language file requests such as “find my driver's license” or “find the lease Jordan signed.”
+The computer-use feature must satisfy the current hack rule: a fresh, messy file request must produce an actual result without forced outputs, prerecorded actions, or document-specific branching. An explicitly labeled Elena Rivera sample case may prefill the existing SSDI application for a fast stage walkthrough, but it must never supply or alter computer-use requests, actions, candidates, or results. The agent may understand SSDI context, but its computer tools must accept arbitrary natural-language file requests such as “find my driver's license” or “find the lease Jordan signed.”
 
 ## Non-negotiable Rules
 
@@ -142,7 +142,7 @@ The feature must satisfy the current hack rule: a fresh, messy input must produc
 
 #### Acceptance Criteria
 
-1. THE production interface SHALL contain no synthetic-case loader, demo query parameter, prerecorded fallback, or forced result path.
+1. THE production interface MAY expose the labeled Elena Rivera sample application loader, but SHALL contain no demo query parameter, prerecorded fallback, synthetic computer-use result, or forced computer-use result path.
 2. A file added or renamed after Clearway starts SHALL be discoverable on the next search without rebuilding or changing configuration.
 3. Two unrelated natural-language searches SHALL produce plans and results grounded in their respective real inputs.
 4. THE live path SHALL run from voice request through STT, planning, native execution, result display, and TTS narration.

@@ -99,6 +99,7 @@ describe("GuidedApplication", () => {
       expect.stringContaining("English"),
       expect.stringContaining("Español"),
       expect.stringContaining("中文（普通话）"),
+      "Load Elena Rivera sample case",
     ]);
     expect(screen.queryByText("Check")).not.toBeInTheDocument();
     expect(screen.queryByText("Review")).not.toBeInTheDocument();
@@ -437,38 +438,31 @@ describe("GuidedApplication", () => {
     );
   });
 
-  it("does not expose a prefilled application shortcut", () => {
-    const inProgressCase = structuredClone(syntheticApplicant);
-    inProgressCase.mode = "session";
-    inProgressCase.applicationPhase = "intake";
-    inProgressCase.activeQuestionId = "ssn";
-    inProgressCase.finalReviewApproved = false;
-    inProgressCase.applicant.legalName.value = "Original Applicant";
-    inProgressCase.interviewTurns = [
-      {
-        id: "original-turn",
-        source: "typed",
-        locale: "en-US",
-        prompt: "What is your full legal name?",
-        transcript: "Original Applicant",
-        createdAt: "2026-07-28T12:00:00.000Z",
-        status: "extracted",
-      },
-    ];
-
+  it("loads Elena's sample answers without faking computer-use results", async () => {
+    const user = userEvent.setup();
     render(
-      <CaseProvider initialCase={inProgressCase}>
+      <CaseProvider>
         <GuidedApplication />
         <CaseProbe />
       </CaseProvider>,
     );
 
-    expect(screen.getAllByText("Original Applicant")).not.toHaveLength(0);
+    await user.click(
+      screen.getByRole("button", { name: "Load Elena Rivera sample case" }),
+    );
+
     expect(
-      screen.queryByRole("button", { name: /demo/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("case-mode")).toHaveTextContent("session");
-    expect(screen.getByTestId("turn-count")).toHaveTextContent("1");
+      screen.getByRole("heading", {
+        name: "Elena Rivera’s sample application is ready.",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/file searches remain live/i)).toBeVisible();
+    expect(screen.getByTestId("case-mode")).toHaveTextContent("synthetic_demo");
+
+    await user.click(
+      screen.getByRole("button", { name: "Continue to documents" }),
+    );
+    expect(screen.getByTestId("case-stage")).toHaveTextContent("documents");
   });
 });
 

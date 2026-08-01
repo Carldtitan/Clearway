@@ -31,6 +31,7 @@ import type {
   SupportedLocale,
 } from "@/lib/case/types";
 import { caseReducer } from "@/lib/case/reducer";
+import { syntheticApplicant } from "@/lib/case/seed";
 import {
   confirmationPrompt,
   confirmationRetry,
@@ -117,6 +118,9 @@ export function GuidedApplication() {
     () => evaluateCompleteness(applicantCase, locale),
     [applicantCase, locale],
   );
+  const sampleCaseReady =
+    applicantCase.mode === "synthetic_demo" &&
+    applicantCase.applicationPhase === "ready";
   useEffect(() => {
     caseRef.current = applicantCase;
   }, [applicantCase]);
@@ -1016,8 +1020,30 @@ export function GuidedApplication() {
     window.setTimeout(() => void askAt(cursor), 120);
   }
 
+  function loadElenaSample() {
+    ++runIdRef.current;
+    voice.cancel();
+    setVoiceSessionActive(false);
+    dispatch({
+      type: "LOAD_CASE",
+      applicantCase: structuredClone(syntheticApplicant),
+    });
+    setCursor(QUESTION_REGISTRY.length);
+    setError(null);
+    setPending(null);
+    setRepairPrompt(null);
+    setTypedAnswer("");
+    setTypedMode(false);
+    setStatus("complete");
+  }
+
   if (applicantCase.applicationPhase === "language") {
-    return <LanguageSelection onSelect={chooseLanguage} />;
+    return (
+      <LanguageSelection
+        onLoadSample={loadElenaSample}
+        onSelect={chooseLanguage}
+      />
+    );
   }
 
   const activePrompt = currentQuestion
@@ -1141,6 +1167,14 @@ export function GuidedApplication() {
               </AnimatePresence>
             ) : null}
 
+            {sampleCaseReady ? (
+              <SampleReadyState
+                onContinue={() =>
+                  dispatch({ type: "SET_STAGE", stage: "documents" })
+                }
+              />
+            ) : null}
+
             {status === "review" ? (
               <ReviewIssues
                 completion={completion}
@@ -1195,18 +1229,20 @@ export function GuidedApplication() {
               />
             ) : null}
 
-            <ConversationControls
-              locale={locale}
-              onFinish={() => voice.finishAnswer()}
-              onPause={() => {
-                if (voice.state === "paused") voice.resume();
-                else voice.pause();
-              }}
-              onRepeat={() => void voice.speak(activePrompt)}
-              onType={() => setTypedMode((visible) => !visible)}
-              showTypeAction={!typedMode}
-              state={voice.state}
-            />
+            {!sampleCaseReady ? (
+              <ConversationControls
+                locale={locale}
+                onFinish={() => voice.finishAnswer()}
+                onPause={() => {
+                  if (voice.state === "paused") voice.resume();
+                  else voice.pause();
+                }}
+                onRepeat={() => void voice.speak(activePrompt)}
+                onType={() => setTypedMode((visible) => !visible)}
+                showTypeAction={!typedMode}
+                state={voice.state}
+              />
+            ) : null}
           </div>
         </div>
       </section>
@@ -1217,8 +1253,10 @@ export function GuidedApplication() {
 }
 
 function LanguageSelection({
+  onLoadSample,
   onSelect,
 }: {
+  onLoadSample: () => void;
   onSelect: (locale: SupportedLocale) => void;
 }) {
   return (
@@ -1252,12 +1290,43 @@ function LanguageSelection({
               </motion.button>
             ))}
           </div>
+          <div className="mt-7 border-t border-border pt-6">
+            <Button onClick={onLoadSample} variant="secondary">
+              <CheckCircle2 aria-hidden="true" className="size-5" />
+              Load Elena Rivera sample case
+            </Button>
+            <p className="mt-3 max-w-[42rem] text-sm leading-relaxed text-muted">
+              Skips the intake with sample application answers. Computer file
+              searches still use real Windows files and live results.
+            </p>
+          </div>
         </div>
         <div className="mx-auto size-60 [mask-image:radial-gradient(circle,black_58%,transparent_74%)] lg:size-72">
           <Orb backgroundColor="#fcf9fb" hoverIntensity={0.28} hue={330} />
         </div>
       </div>
     </section>
+  );
+}
+
+function SampleReadyState({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-sm font-bold text-success">
+        <CheckCircle2 aria-hidden="true" className="size-5" />
+        Sample case loaded
+      </div>
+      <h1 className="mt-4 max-w-[24ch] text-3xl font-bold leading-[1.08] tracking-[-0.035em] text-balance sm:text-4xl">
+        Elena Rivera’s sample application is ready.
+      </h1>
+      <p className="mt-4 max-w-[42rem] leading-relaxed text-muted">
+        Her saved answers can fill the SSDI forms. Local file searches remain
+        live and are never supplied by this sample case.
+      </p>
+      <Button className="mt-7" onClick={onContinue}>
+        Continue to documents
+      </Button>
+    </div>
   );
 }
 
