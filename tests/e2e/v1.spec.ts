@@ -1,20 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 const artifactDirectory = path.join(process.cwd(), "output", "playwright");
-
-async function reachDocuments(page: Page) {
-  await page.goto("/?demo=1&stage=documents", {
-    waitUntil: "networkidle",
-  });
-  await expect(
-    page.getByRole("heading", {
-      name: /review and download your application documents/i,
-    }),
-  ).toBeVisible();
-}
 
 test.beforeAll(async () => {
   await mkdir(artifactDirectory, { recursive: true });
@@ -300,7 +289,7 @@ test("language is the first decision and removed workflow copy is absent", async
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
 
-  await expect(page).toHaveTitle("Formless");
+  await expect(page).toHaveTitle("Clearway");
   await expect(
     page.getByRole("heading", {
       name: "Which language would you like to use?",
@@ -375,153 +364,6 @@ test("typed recovery continues to the first required question", async ({
   ).toBeVisible();
   await expect(page.getByText("Check")).toHaveCount(0);
   await expect(page.getByText("Review")).toHaveCount(0);
-});
-
-test("continuous voice generates Documents and updates Records", async ({
-  page,
-}) => {
-  await installSyntheticMicrophone(page);
-  const transcripts = [
-    "yes",
-    "yes",
-    "yes",
-    "mark received",
-    "yes",
-  ];
-  await page.route("**/api/speak", (route) =>
-    route.fulfill({
-      status: 503,
-      contentType: "application/json",
-      body: JSON.stringify({ error: "Use browser speech in this test." }),
-    }),
-  );
-  await page.route("**/api/transcribe", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ transcript: transcripts.shift() ?? "status" }),
-    }),
-  );
-  await page.route("**/api/packet/generate", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/pdf",
-      headers: {
-        "x-packet-documents": "5",
-        "x-packet-pages": "39",
-      },
-      body: "synthetic packet",
-    }),
-  );
-
-  await page.goto("/?demo=1&stage=documents&voice=1", {
-    waitUntil: "networkidle",
-  });
-
-  await expect(
-    page.getByRole("heading", { name: /keep the evidence moving/i }),
-  ).toBeVisible();
-  await expect(page.getByText("2 of 3 received")).toBeVisible();
-  await expect(
-    page.getByText("Mercy General Hospital is marked received."),
-  ).toBeVisible();
-  expect(transcripts).toEqual([]);
-});
-
-test("complete demo generates and downloads the real packet", async ({
-  page,
-}) => {
-  const consoleErrors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
-  });
-
-  await reachDocuments(page);
-  await page.screenshot({
-    path: path.join(artifactDirectory, "documents-ready-desktop.png"),
-    fullPage: true,
-  });
-
-  const packetAudit = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(packetAudit.violations).toEqual([]);
-
-  await page.getByRole("button", { name: /generate packet/i }).click();
-  await expect(page.getByText("Packet ready")).toBeVisible({
-    timeout: 30_000,
-  });
-  await expect(page.getByText(/39 pages · 5 documents/i)).toBeVisible();
-
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("link", { name: /download packet/i }).click();
-  const download = await downloadPromise;
-  const downloadPath = path.join(
-    artifactDirectory,
-    download.suggestedFilename(),
-  );
-  await download.saveAs(downloadPath);
-  expect((await stat(downloadPath)).size).toBeGreaterThan(200_000);
-
-  await page
-    .getByRole("button", { name: /track medical records/i })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: /keep the evidence moving/i }),
-  ).toBeVisible();
-  await expect(page.getByText("Deadline passed")).toBeVisible();
-
-  const recordsAudit = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(recordsAudit.violations).toEqual([]);
-  expect(consoleErrors).toEqual([]);
-});
-
-test("Documents remains usable at phone width", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await reachDocuments(page);
-
-  await expect(page.getByText("Bring with you")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /generate packet/i }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true);
-
-  const audit = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(audit.violations).toEqual([]);
-});
-
-test("document failure preserves progress and exposes the recorded fallback", async ({
-  page,
-}) => {
-  await reachDocuments(page);
-  await page.route("**/api/packet/generate", (route) =>
-    route.fulfill({
-      body: JSON.stringify({
-        error:
-          "Document generation is unavailable right now. Your answers are still here.",
-      }),
-      contentType: "application/json",
-      status: 503,
-    }),
-  );
-
-  await page.getByRole("button", { name: /generate packet/i }).click();
-
-  await expect(page.getByText("Packet not generated")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
-  await expect(
-    page.getByRole("link", {
-      name: /watch the synthetic packet fallback/i,
-    }),
-  ).toHaveAttribute("href", "/demo/packet-fallback.webm");
 });
 
 async function installSyntheticMicrophone(page: Page) {

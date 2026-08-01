@@ -10,25 +10,19 @@ vi.mock("@/components/visual/orb", () => ({
 }));
 
 describe("CheckFlow", () => {
-  it("loads the synthetic case and continues without persisting it", async () => {
-    const user = userEvent.setup();
+  it("does not expose a synthetic case shortcut", () => {
     render(
       <CaseProvider>
         <CheckFlow />
       </CaseProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Load Elena's demo" }));
-
     expect(
-      await screen.findByRole("heading", {
-        name: "One detail needs a closer look",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Possible work-income issue")).toBeInTheDocument();
+      screen.queryByRole("button", { name: /demo/i }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText("The recent-work estimate may be short"),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: "Start voice check" }),
+    ).toBeVisible();
   });
 
   it("reads back each answer before advancing", async () => {

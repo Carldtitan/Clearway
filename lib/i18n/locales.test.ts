@@ -21,9 +21,9 @@ describe("locale registry", () => {
     expect(localeDefinition("zh-CN").deepgramModel).toBe("nova-3");
   });
 
-  it("introduces the product as Formless in every supported language", () => {
+  it("introduces the product as Clearway in every supported language", () => {
     for (const locale of SUPPORTED_LOCALES) {
-      expect(copy.introduction[locale.id]).toContain("Formless");
+      expect(copy.introduction[locale.id]).toContain("Clearway");
     }
   });
 });

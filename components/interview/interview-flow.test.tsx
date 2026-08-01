@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CaseProvider, useApplicantCase } from "@/components/app/case-context";
 import { InterviewFlow } from "@/components/interview/interview-flow";
-import { syntheticApplicant } from "@/lib/case/seed";
 
 const voiceMocks = vi.hoisted(() => ({
   activate: vi.fn(),
@@ -44,43 +43,24 @@ afterEach(() => {
 });
 
 describe("InterviewFlow", () => {
-  it("turns the demo transcript into visible facts before review", async () => {
-    const user = userEvent.setup();
+  it("starts only from live voice or keyboard input", () => {
     render(
       <CaseProvider>
         <InterviewFlow />
-        <CaseProbe />
       </CaseProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Demo answer" }));
-
-    const reviewButton = await screen.findByRole("button", {
-      name: "Review captured facts",
-    });
-    expect(screen.getAllByText("Spinal stenosis")).toHaveLength(2);
-    expect(screen.getAllByText("Provider list marked complete")).toHaveLength(
-      2,
-    );
-    expect(screen.getByTestId("case-stage")).toHaveTextContent("application");
-
-    await user.click(reviewButton);
-    expect(screen.getByTestId("case-stage")).toHaveTextContent("review");
-  });
-
-  it("does not duplicate an already populated synthetic case", async () => {
-    const user = userEvent.setup();
-    render(
-      <CaseProvider initialCase={structuredClone(syntheticApplicant)}>
-        <InterviewFlow />
-        <CaseProbe />
-      </CaseProvider>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Demo answer" }));
-    await screen.findByRole("button", { name: "Review captured facts" });
-
-    expect(screen.getByTestId("condition-count")).toHaveTextContent("2");
+    expect(
+      screen.queryByRole("button", { name: /demo/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start voice interview" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Use one-question keyboard fallback",
+      }),
+    ).toBeVisible();
   });
 
   it("asks, listens, reads back, and advances without typing", async () => {

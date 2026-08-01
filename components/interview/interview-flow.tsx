@@ -10,7 +10,6 @@ import {
   Pause,
   Play,
   RotateCcw,
-  Sparkles,
   Square,
   Volume2,
 } from "lucide-react";
@@ -29,7 +28,6 @@ import Orb from "@/components/visual/orb";
 import { useVoiceTurn } from "@/components/voice/use-voice-turn";
 import type { InterviewTurn } from "@/lib/case/types";
 import { applyInterviewExtraction } from "@/lib/extraction/apply";
-import { DEMO_EXTRACTION, DEMO_TRANSCRIPT } from "@/lib/extraction/demo";
 import type { InterviewExtraction } from "@/lib/extraction/schema";
 import { parseYesNo } from "@/lib/voice/answer-parsers";
 import { cn } from "@/lib/utils";
@@ -52,7 +50,7 @@ interface InterviewTopic {
 interface PendingTurn {
   extraction: InterviewExtraction;
   prompt: string;
-  source: InterviewTurn["source"];
+  source: Exclude<InterviewTurn["source"], "demo">;
   topicIndex: number;
   transcript: string;
   turnId: string;
@@ -222,7 +220,6 @@ const factLabels: Partial<
 
 export function InterviewFlow() {
   const {
-    applicantCase,
     dispatch,
     setVoiceSessionActive,
     voiceSessionActive,
@@ -362,7 +359,7 @@ export function InterviewFlow() {
 
   async function extractTurn(
     rawTranscript: string,
-    source: InterviewTurn["source"],
+    source: Exclude<InterviewTurn["source"], "demo">,
     currentTopicIndex: number,
     currentPrompt: string,
   ): Promise<PendingTurn | null> {
@@ -372,8 +369,7 @@ export function InterviewFlow() {
       setError("Add an answer before continuing.");
       return null;
     }
-    const turnId =
-      source === "demo" ? "demo-interview-turn" : `turn-${crypto.randomUUID()}`;
+    const turnId = `turn-${crypto.randomUUID()}`;
     dispatch({
       type: "ADD_INTERVIEW_TURN",
       turn: {
@@ -389,15 +385,12 @@ export function InterviewFlow() {
     setError(null);
     setFailedTurn(null);
     try {
-      const extraction =
-        source === "demo"
-          ? DEMO_EXTRACTION
-          : await requestExtraction(
-              turnId,
-              topics[currentTopicIndex].id,
-              currentPrompt,
-              transcript,
-            );
+      const extraction = await requestExtraction(
+        turnId,
+        topics[currentTopicIndex].id,
+        currentPrompt,
+        transcript,
+      );
       const nextPending = {
         extraction,
         prompt: currentPrompt,
@@ -508,17 +501,10 @@ export function InterviewFlow() {
   }
 
   function commitPending(turn: PendingTurn) {
-    if (!(turn.source === "demo" && applicantCase.mode === "synthetic_demo")) {
-      applyInterviewExtraction(dispatch, turn.extraction, turn.turnId, {
-        confirmed: true,
-        source:
-          turn.source === "typed"
-            ? "typed"
-            : turn.source === "demo"
-              ? "seed"
-              : "voice",
-      });
-    }
+    applyInterviewExtraction(dispatch, turn.extraction, turn.turnId, {
+      confirmed: true,
+      source: turn.source === "typed" ? "typed" : "voice",
+    });
     dispatch({
       type: "UPDATE_INTERVIEW_TURN",
       turnId: turn.turnId,
@@ -595,20 +581,6 @@ export function InterviewFlow() {
     setStatus("asking");
   }
 
-  function loadDemoAnswer() {
-    setVoiceSessionActive(false);
-    ++runIdRef.current;
-    setMode("typed");
-    setTopicIndex(topics.length - 1);
-    void extractTurn(DEMO_TRANSCRIPT, "demo", 0, topics[0].prompt).then(
-      (nextPending) => {
-        if (!nextPending) return;
-        commitPending(nextPending);
-        setStatus("ready");
-      },
-    );
-  }
-
   const shownFacts = useMemo(
     () =>
       (pending?.extraction.facts ?? capturedFacts)
@@ -626,7 +598,6 @@ export function InterviewFlow() {
       <section className="min-w-0 pb-20">
         {status === "intro" ? (
           <InterviewIntro
-            onDemo={loadDemoAnswer}
             onKeyboard={startTypedInterview}
             onStart={() => void startVoiceInterview()}
           />
@@ -777,11 +748,9 @@ export function InterviewFlow() {
 }
 
 function InterviewIntro({
-  onDemo,
   onKeyboard,
   onStart,
 }: {
-  onDemo: () => void;
   onKeyboard: () => void;
   onStart: () => void;
 }) {
@@ -799,10 +768,6 @@ function InterviewIntro({
         <Button className="sm:min-w-52" onClick={onStart}>
           <Mic aria-hidden="true" className="size-4" />
           Start voice interview
-        </Button>
-        <Button onClick={onDemo} variant="secondary">
-          <Sparkles aria-hidden="true" className="size-4 text-primary" />
-          Demo answer
         </Button>
       </div>
       <Button

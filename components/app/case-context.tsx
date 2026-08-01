@@ -12,17 +12,14 @@ import {
 
 import { createEmptyApplicantCase } from "@/lib/case/empty";
 import { caseReducer } from "@/lib/case/reducer";
-import { syntheticApplicant } from "@/lib/case/seed";
 import type {
   ApplicantCase,
   CaseAction,
-  SupportedLocale,
 } from "@/lib/case/types";
 
 interface CaseContextValue {
   applicantCase: ApplicantCase;
   dispatch: Dispatch<CaseAction>;
-  loadDemo: (locale?: SupportedLocale) => void;
   setVoiceSessionActive: (active: boolean) => void;
   voiceSessionActive: boolean;
 }
@@ -47,22 +44,6 @@ export function CaseProvider({
     () => ({
       applicantCase,
       dispatch,
-      loadDemo: (
-        locale = applicantCase.conversationLocale ?? "en-US",
-      ) => {
-        const demoCase = structuredClone(syntheticApplicant);
-        demoCase.conversationLocale = locale;
-        demoCase.applicant.preferredLanguage.value =
-          locale === "es-US"
-            ? "Spanish"
-            : locale === "zh-CN"
-              ? "Chinese (Mandarin)"
-              : "English";
-        dispatch({
-          type: "LOAD_CASE",
-          applicantCase: demoCase,
-        });
-      },
       setVoiceSessionActive,
       voiceSessionActive,
     }),

@@ -1,11 +1,14 @@
 {
-  "name": "formless",
+  "name": "clearway",
   "version": "0.1.0",
   "private": true,
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "desktop": "electron desktop/main.cjs",
+    "desktop:dev": "electron desktop/main.cjs --url=http://localhost:3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -14,7 +17,6 @@
     "test:e2e:ui": "playwright test --ui",
     "inspect:anvil": "tsx --env-file=.env scripts/inspect-anvil-schema.ts",
     "verify:packet:live": "tsx --env-file=.env scripts/verify-packet-live.ts",
-    "record:demo-fallback": "tsx --env-file=.env scripts/record-demo-fallback.ts",
     "design:detect": "node skills/impeccable/scripts/detect.mjs --json app components"
   },
   "dependencies": {
@@ -30,12 +32,14 @@
     "next": "latest",
     "ogl": "^1.0.11",
     "pdf-lib": "^1.17.1",
+    "pdf-parse": "^2.4.5",
     "postcss": "8.5.18",
     "react": "latest",
     "react-dom": "latest",
     "server-only": "^0.0.1",
     "sharp": "0.35.0",
     "tailwind-merge": "latest",
+    "tesseract.js": "^7.0.0",
     "zod": "latest"
   },
   "devDependencies": {
@@ -49,6 +53,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "electron": "^43.2.0",
     "eslint": "latest",
     "eslint-config-next": "latest",
     "fast-check": "latest",

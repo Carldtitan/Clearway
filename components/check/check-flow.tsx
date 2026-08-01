@@ -11,7 +11,6 @@ import {
   Pause,
   Play,
   RotateCcw,
-  Sparkles,
   Square,
   Volume2,
 } from "lucide-react";
@@ -215,12 +214,8 @@ const resultLanguage: Record<
 };
 
 export function CheckFlow() {
-  const {
-    applicantCase,
-    dispatch,
-    loadDemo,
-    setVoiceSessionActive,
-  } = useApplicantCase();
+  const { applicantCase, dispatch, setVoiceSessionActive } =
+    useApplicantCase();
   const [screen, setScreen] = useState<CheckScreen>(
     applicantCase.eligibilityInput.monthlyEarningsUsd !== null
       ? "result"
@@ -435,11 +430,6 @@ export function CheckFlow() {
       >
         {screen === "start" ? (
           <StartCheck
-            onDemo={() => {
-              setVoiceSessionActive(false);
-              loadDemo();
-              setScreen("result");
-            }}
             onKeyboard={startKeyboardCheck}
             onStart={() => void startVoiceCheck()}
           />
@@ -487,11 +477,9 @@ export function CheckFlow() {
 }
 
 function StartCheck({
-  onDemo,
   onKeyboard,
   onStart,
 }: {
-  onDemo: () => void;
   onKeyboard: () => void;
   onStart: () => void;
 }) {
@@ -513,10 +501,6 @@ function StartCheck({
         <Button className="sm:min-w-52" onClick={onStart}>
           <Mic aria-hidden="true" className="size-4" />
           Start voice check
-        </Button>
-        <Button onClick={onDemo} variant="secondary">
-          <Sparkles aria-hidden="true" className="size-4 text-primary" />
-          Load Elena&apos;s demo
         </Button>
       </div>
 

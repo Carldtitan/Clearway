@@ -1,8 +1,8 @@
-# Formless
+# Clearway
 
 **Live application:** [alix-jo.vercel.app](https://alix-jo.vercel.app/)
 
-Formless helps a person prepare an SSDI application and organize the supporting medical records through a guided conversation.
+Clearway helps a person prepare an SSDI application, organize supporting records, and find real documents on an approved Windows computer through a guided conversation.
 
 ## The problem
 
@@ -17,20 +17,18 @@ Applying for Social Security Disability Insurance is not simply a matter of comp
 
 That information must remain consistent across several long documents. The administrative burden is especially difficult for someone who is already managing pain, fatigue, cognitive limitations, paralysis, or limited access to trained benefits assistance.
 
-Formless brings the practical structure of a benefits-navigation interview into an accessible voice-guided product. It helps the applicant tell their story once, confirms what it understood, reuses the reviewed facts across every document, and keeps missing evidence visible. It does not act as the applicant's representative or promise approval.
+Clearway brings the practical structure of a benefits-navigation interview into an accessible voice-guided product. It helps the applicant tell their story once, confirms what it understood, reuses reviewed facts across every document, and can search approved local folders for real supporting evidence. It does not act as the applicant's representative or promise approval.
 
-## Try Formless
+## Try Clearway
 
 Open the [live Vercel deployment](https://alix-jo.vercel.app/) in a current browser:
 
 1. Choose English, Spanish, or Mandarin.
 2. Allow microphone access and begin the guided conversation.
-3. Answer naturally; Formless reads back each interpretation before saving it.
-4. Select **Demo** at any point to replace the current session with Elena Rivera's complete synthetic case.
-5. Continue to **Documents** and generate the live application packet through Anvil.
+3. Answer naturally; Clearway reads back each interpretation before saving it.
+4. Continue to **Documents** and generate the live application packet through Anvil.
+5. In Clearway Desktop, approve local folders and ask for any document in ordinary language.
 6. Open **Records** to see medical-record requests, deadlines, and follow-up actions.
-
-The demo case is synthetic, but document generation uses the same server route, validation, form adapters, and Anvil templates as a normal session.
 
 ## What the product does
 
@@ -80,7 +78,7 @@ The application uses a single in-memory `ApplicantCase` as its source of truth. 
 
 Four official SSA PDFs are configured as published Anvil templates. Server-only adapters translate the canonical case into verified Anvil field aliases.
 
-Formless uses:
+Clearway uses:
 
 - Anvil `fillPDF` for SSA-16, SSA-3368, SSA-3369, and SSA-827
 - Anvil `generatePDF` for the medical evidence index and overflow continuation sheets
@@ -104,9 +102,9 @@ Unknown aliases are rejected before generation. Missing or contradictory require
 - V1 keeps the applicant case in browser memory and does not include a database.
 - Service keys remain in server-only environment variables.
 - API responses containing case data or PDFs use `Cache-Control: no-store`.
-- Formless prepares an applicant working copy; it does not file with SSA.
-- Formless does not decide eligibility, contact providers, provide legal advice, or guarantee approval.
-- A live integration failure preserves the current case and exposes an explicit demo fallback.
+- Clearway prepares an applicant working copy; it does not file with SSA.
+- Clearway does not decide eligibility, contact providers, provide legal advice, or guarantee approval.
+- A live integration failure preserves the current case and reports the failed action without fabricating output.
 
 ## Development and verification
 
@@ -122,8 +120,8 @@ npm run test:e2e
 npm run build
 ```
 
-The browser suite exercises the complete synthetic application, downloads the live packet, checks desktop and phone layouts, audits WCAG A/AA behavior, and verifies failure recovery.
+The browser suite exercises application and packet behavior, checks desktop and phone layouts, audits WCAG A/AA behavior, and verifies failure recovery. Computer-use acceptance checks run against fresh local files.
 
-Detailed product requirements and architecture live in [`specs/formless/`](specs/formless/). Program rules and document behavior are grounded in the sources cataloged in [latest_pathway.md](latest_pathway.md) and [REQUIREMENTS.md](REQUIREMENTS.md).
+Detailed product requirements and architecture live in [`specs/clearway/`](specs/clearway/). Program rules and document behavior are grounded in the sources cataloged in [latest_pathway.md](latest_pathway.md) and [REQUIREMENTS.md](REQUIREMENTS.md).
 
 The animated voice orb is adapted from the open-source [React Bits Orb](https://github.com/DavidHDev/react-bits).

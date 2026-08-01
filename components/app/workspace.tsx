@@ -8,11 +8,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 import { GuidedApplication } from "@/components/application/guided-application";
 import { BrandMark } from "@/components/app/brand-mark";
 import { useApplicantCase } from "@/components/app/case-context";
+import { ComputerAssistant } from "@/components/computer/computer-assistant";
 import { PacketFlow } from "@/components/packet/packet-flow";
 import { RecordsTracker } from "@/components/records/records-tracker";
 import type { UserStage } from "@/lib/case/types";
@@ -31,13 +32,7 @@ const stages: StageItem[] = [
 ];
 
 export function Workspace() {
-  const {
-    applicantCase,
-    dispatch,
-    loadDemo,
-    setVoiceSessionActive,
-  } = useApplicantCase();
-  const demoLoadedRef = useRef(false);
+  const { applicantCase, dispatch } = useApplicantCase();
   const activeStage = normalizeStage(applicantCase.stage);
   const locale = applicantCase.conversationLocale ?? "en-US";
   const activeIndex = stages.findIndex((stage) => stage.id === activeStage);
@@ -45,23 +40,6 @@ export function Workspace() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [activeStage]);
-
-  useEffect(() => {
-    if (demoLoadedRef.current) return;
-    const parameters = new URLSearchParams(window.location.search);
-    if (parameters.get("demo") !== "1") return;
-    demoLoadedRef.current = true;
-    loadDemo();
-    if (parameters.get("voice") === "1") {
-      setVoiceSessionActive(true);
-    }
-    const requestedStage = parameters.get("stage");
-    if (requestedStage === "documents" || requestedStage === "records") {
-      window.queueMicrotask(() =>
-        dispatch({ type: "SET_STAGE", stage: requestedStage }),
-      );
-    }
-  }, [dispatch, loadDemo, setVoiceSessionActive]);
 
   function navigate(stage: UserStage) {
     const destinationIndex = stages.findIndex((item) => item.id === stage);
@@ -82,7 +60,7 @@ export function Workspace() {
         <aside className="hidden border-r border-border bg-surface lg:flex lg:min-h-dvh lg:flex-col lg:p-5">
           <div className="flex items-center gap-3 px-2 py-1">
             <BrandMark />
-            <p className="text-lg font-bold leading-none">Formless</p>
+            <p className="text-lg font-bold leading-none">Clearway</p>
           </div>
 
           <nav aria-label="Application stages" className="mt-12">
@@ -136,7 +114,7 @@ export function Workspace() {
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-10">
             <div className="flex items-center gap-2.5 lg:hidden">
               <BrandMark />
-              <p className="font-bold">Formless</p>
+              <p className="font-bold">Clearway</p>
             </div>
             <p className="hidden max-w-[48rem] text-sm text-muted lg:block">
               {localized(copy.productDescription, locale)}
@@ -172,6 +150,10 @@ export function Workspace() {
           </AnimatePresence>
         </main>
       </div>
+
+      {applicantCase.conversationLocale ? (
+        <ComputerAssistant locale={locale} />
+      ) : null}
 
       {applicantCase.conversationLocale ? (
         <nav

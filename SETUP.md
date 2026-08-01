@@ -1,4 +1,4 @@
-# Formless setup
+# Clearway setup
 
 V1 is implemented as a Next.js application. It runs locally with in-memory case state and calls Anthropic, Deepgram, and Anvil only through server routes.
 
@@ -58,7 +58,7 @@ npm run record:demo-fallback
 ```
 
 Generated packet and screenshot artifacts are written under ignored `output/` directories and are never committed.
-The fallback command refreshes `public/demo/packet-fallback.webm` using only the synthetic applicant.
+Fresh-input verification must use real files selected at runtime; there is no prerecorded fallback command.
 
 ## V1 boundaries
 

@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       headers: {
         "Cache-Control": "no-store, max-age=0",
         "Content-Disposition":
-          'attachment; filename="formless-ssdi-application-packet.pdf"',
+          'attachment; filename="clearway-ssdi-application-packet.pdf"',
         "Content-Length": String(packet.bytes.byteLength),
         "Content-Type": "application/pdf",
         "X-Packet-Documents": String(packet.documentLabels.length),

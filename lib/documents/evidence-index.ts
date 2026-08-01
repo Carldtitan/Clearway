@@ -69,7 +69,7 @@ export function buildEvidenceIndex(
     data: {
       html: `
         <header>
-          <p class="eyebrow">Formless</p>
+          <p class="eyebrow">Clearway</p>
           <h1>Medical evidence index</h1>
           <p class="summary">Prepared for ${escapeHtml(applicantCase.applicant.legalName.value ?? "applicant")} · Updated ${escapeHtml(today)}</p>
         </header>

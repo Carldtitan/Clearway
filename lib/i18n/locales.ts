@@ -59,11 +59,11 @@ export const copy = {
   },
   introduction: {
     "en-US":
-      "Hi, I’m Formless. I’ll help prepare your disability application. Please gather the documents shown here; if anything is missing, we can return to it. Say “I’m ready” to begin.",
+      "Hi, I’m Clearway. I’ll help prepare your disability application. Please gather the documents shown here; if anything is missing, we can return to it. Say “I’m ready” to begin.",
     "es-US":
-      "Hola, soy Formless. Le ayudaré a preparar su solicitud por discapacidad. Reúna los documentos que aparecen aquí; si le falta algo, podemos volver a ello después. Diga “Estoy listo” o “Estoy lista” para comenzar.",
+      "Hola, soy Clearway. Le ayudaré a preparar su solicitud por discapacidad. Reúna los documentos que aparecen aquí; si le falta algo, podemos volver a ello después. Diga “Estoy listo” o “Estoy lista” para comenzar.",
     "zh-CN":
-      "您好，我是 Formless。我会帮助您准备残障福利申请。请准备好页面上列出的材料；如果暂时缺少某项，我们稍后再补充。准备好后，请说“我准备好了”。",
+      "您好，我是 Clearway。我会帮助您准备残障福利申请。请准备好页面上列出的材料；如果暂时缺少某项，我们稍后再补充。准备好后，请说“我准备好了”。",
   },
   preparing: {
     "en-US": "What to have nearby",
@@ -157,62 +157,6 @@ export const copy = {
     "es-US":
       "Hemos llegado a la revisión. Identificaré lo que aún necesita su atención antes de crear los documentos.",
     "zh-CN": "现在进入核对环节。生成文件前，我会指出仍需您处理的事项。",
-  },
-  fillDemo: {
-    "en-US": "Fill demo application",
-    "es-US": "Completar solicitud de demostración",
-    "zh-CN": "填充演示申请",
-  },
-  demoShort: {
-    "en-US": "Demo",
-    "es-US": "Demo",
-    "zh-CN": "演示",
-  },
-  demoReplaceTitle: {
-    "en-US": "Replace this application with the demo case?",
-    "es-US": "¿Reemplazar esta solicitud con el caso de demostración?",
-    "zh-CN": "要用演示案例替换当前申请吗？",
-  },
-  demoReplaceDescription: {
-    "en-US":
-      "Your answers from this session will be removed and replaced with Elena Rivera’s complete synthetic application.",
-    "es-US":
-      "Sus respuestas de esta sesión se eliminarán y se reemplazarán con la solicitud sintética completa de Elena Rivera.",
-    "zh-CN":
-      "本次会话中的回答将被删除，并替换为 Elena Rivera 的完整虚构申请。",
-  },
-  keepAnswers: {
-    "en-US": "Keep my answers",
-    "es-US": "Conservar mis respuestas",
-    "zh-CN": "保留我的回答",
-  },
-  loadDemoCase: {
-    "en-US": "Load demo case",
-    "es-US": "Cargar caso de demostración",
-    "zh-CN": "加载演示案例",
-  },
-  demoLoaded: {
-    "en-US": "Demo case loaded",
-    "es-US": "Caso de demostración cargado",
-    "zh-CN": "演示案例已加载",
-  },
-  demoReadyTitle: {
-    "en-US": "Elena Rivera’s application is complete.",
-    "es-US": "La solicitud de Elena Rivera está completa.",
-    "zh-CN": "Elena Rivera 的申请已完成。",
-  },
-  demoReadyDescription: {
-    "en-US":
-      "The synthetic case includes her work history, disabling conditions, treatment sources, medications, medical test, and record follow-up status.",
-    "es-US":
-      "El caso sintético incluye su historial laboral, condiciones discapacitantes, fuentes de tratamiento, medicamentos, prueba médica y estado de seguimiento de expedientes.",
-    "zh-CN":
-      "该虚构案例包括工作经历、致残状况、治疗来源、药物、医学检查和病历跟进状态。",
-  },
-  continueDocuments: {
-    "en-US": "Continue to documents",
-    "es-US": "Continuar a documentos",
-    "zh-CN": "继续生成文件",
   },
 } satisfies Record<string, LocalizedText>;
 

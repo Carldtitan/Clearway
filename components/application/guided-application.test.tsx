@@ -437,8 +437,7 @@ describe("GuidedApplication", () => {
     );
   });
 
-  it("atomically replaces an in-progress case with the complete demo", async () => {
-    const user = userEvent.setup();
+  it("does not expose a prefilled application shortcut", () => {
     const inProgressCase = structuredClone(syntheticApplicant);
     inProgressCase.mode = "session";
     inProgressCase.applicationPhase = "intake";
@@ -465,32 +464,11 @@ describe("GuidedApplication", () => {
     );
 
     expect(screen.getAllByText("Original Applicant")).not.toHaveLength(0);
-    await user.click(
-      screen.getByRole("button", { name: "Fill demo application" }),
-    );
     expect(
-      screen.getByRole("dialog", {
-        name: "Replace this application with the demo case?",
-      }),
-    ).toBeVisible();
-    expect(voiceMocks.cancel).toHaveBeenCalledOnce();
-
-    await user.click(screen.getByRole("button", { name: "Load demo case" }));
-
-    expect(voiceMocks.cancel).toHaveBeenCalled();
-    expect(
-      screen.getByRole("heading", {
-        name: "Elena Rivera’s application is complete.",
-      }),
-    ).toBeVisible();
-    expect(screen.queryAllByText("Original Applicant")).toHaveLength(0);
-    expect(screen.getByTestId("case-mode")).toHaveTextContent("synthetic_demo");
-    expect(screen.getByTestId("turn-count")).toHaveTextContent("0");
-
-    await user.click(
-      screen.getByRole("button", { name: "Continue to documents" }),
-    );
-    expect(screen.getByTestId("case-stage")).toHaveTextContent("documents");
+      screen.queryByRole("button", { name: /demo/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("case-mode")).toHaveTextContent("session");
+    expect(screen.getByTestId("turn-count")).toHaveTextContent("1");
   });
 });
 

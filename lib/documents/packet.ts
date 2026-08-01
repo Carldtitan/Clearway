@@ -58,10 +58,10 @@ export async function generateDocumentPacket(
     const pages = await merged.copyPages(source, source.getPageIndices());
     pages.forEach((page) => merged.addPage(page));
   }
-  merged.setTitle("Formless SSDI application packet");
-  merged.setAuthor("Formless");
+  merged.setTitle("Clearway SSDI application packet");
+  merged.setAuthor("Clearway");
   merged.setSubject("Applicant-prepared working copy");
-  merged.setCreator("Formless with Anvil");
+  merged.setCreator("Clearway with Anvil");
   const bytes = await merged.save({ useObjectStreams: false });
 
   return {
