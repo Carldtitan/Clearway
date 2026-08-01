@@ -65,7 +65,7 @@ This plan implements the Clearway requirements and design in dependency order. N
   - [ ] 6.2 Run one voice-driven fresh-input search in Clearway Desktop.
     - _Requirements: C10.2-C10.4_
     - **Verification:** add or rename an unseen file after launch, ask for it naturally, and observe real planning, native activity, matching result, and TTS without a code change.
-  - [ ] 6.3 Deploy the Clearway-branded web application and load it through Clearway Desktop.
+  - [x] 6.3 Deploy the Clearway-branded web application and load it through Clearway Desktop.
     - _Requirements: C1, C2.1, C10.4_
     - **Verification:** the configured deployed origin completes the same fresh-input path.
 
